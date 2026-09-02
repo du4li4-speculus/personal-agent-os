@@ -1,0 +1,9 @@
+{
+  "artifacts": [
+    "student_report",
+    "parent_report",
+    "teacher_dashboard"
+  ],
+  "source": "assessment.json",
+  "validation_required": true
+}
