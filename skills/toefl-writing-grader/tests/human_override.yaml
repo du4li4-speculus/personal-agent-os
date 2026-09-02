@@ -1,0 +1,7 @@
+test: human_override
+input:
+  ai_diagnosis: argument_development
+  teacher_override: causal_reasoning_gap
+expected:
+  preserve_override: true
+  update_rule_automatically: false
