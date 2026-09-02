@@ -1,0 +1,34 @@
+states:
+  CREATED:
+    next: IDENTIFY_TASK
+
+  IDENTIFY_TASK:
+    next: FIND_SKILL
+
+  FIND_SKILL:
+    gate: skill_registry
+    next: LOAD_SKILL
+
+  LOAD_SKILL:
+    gate: skill_definition
+    next: RUNTIME_CHECK
+
+  RUNTIME_CHECK:
+    next:
+      - EXECUTE
+      - RECOVERY
+
+  EXECUTE:
+    requires:
+      - execution_trace
+    next: ARTIFACT
+
+  ARTIFACT:
+    gate: artifact_validation
+    next: VALIDATE
+
+  VALIDATE:
+    next: DELIVER
+
+  DELIVER:
+    final: true
