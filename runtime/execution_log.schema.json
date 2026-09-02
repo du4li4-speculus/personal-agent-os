@@ -2,12 +2,80 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Agent Execution Trace",
   "type": "object",
-  "required": ["task", "skill", "version", "steps", "status"],
+  "required": [
+    "run_id",
+    "task",
+    "skill",
+    "version",
+    "started_at",
+    "finished_at",
+    "transitions",
+    "steps",
+    "artifacts",
+    "proof",
+    "status",
+    "final_state"
+  ],
   "properties": {
+    "run_id": {"type": "string", "minLength": 1},
     "task": {"type": "string"},
     "skill": {"type": "string"},
     "version": {"type": "string"},
-    "steps": {"type": "array"},
-    "status": {"type": "string"}
+    "input_path": {"type": ["string", "null"]},
+    "output_dir": {"type": "string"},
+    "started_at": {"type": "string", "minLength": 1},
+    "finished_at": {"type": ["string", "null"]},
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "at"],
+        "properties": {
+          "from": {"type": ["string", "null"]},
+          "to": {"type": "string", "minLength": 1},
+          "at": {"type": "string", "minLength": 1},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "at", "details"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "minLength": 1},
+          "at": {"type": "string", "minLength": 1},
+          "details": {"type": "object"},
+          "error_code": {"type": "string"},
+          "error_message": {"type": "string"}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "proof": {
+      "type": "object",
+      "required": [
+        "skill_loaded",
+        "runtime_checked",
+        "execution_traced",
+        "artifacts_validated",
+        "validation_completed"
+      ],
+      "properties": {
+        "skill_loaded": {"type": "boolean"},
+        "runtime_checked": {"type": "boolean"},
+        "execution_traced": {"type": "boolean"},
+        "artifacts_validated": {"type": "boolean"},
+        "validation_completed": {"type": "boolean"}
+      }
+    },
+    "status": {"enum": ["RUNNING", "SUCCEEDED", "FAILED"]},
+    "final_state": {"type": "string", "minLength": 1},
+    "errors": {"type": "array"}
   }
 }
