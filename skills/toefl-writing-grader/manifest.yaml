@@ -1,0 +1,16 @@
+name: toefl-writing-grader
+version: 2.0.0
+type: assessment
+inputs:
+  - pages
+  - text
+outputs:
+  - assessment.json
+  - diagnosis.json
+  - learning_loop.json
+  - student_report.pdf
+  - parent_report.pdf
+  - teacher_dashboard.json
+requires:
+  - runtime.execution_proof
+  - runtime.validation
