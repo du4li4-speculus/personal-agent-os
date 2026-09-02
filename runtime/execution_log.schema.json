@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Execution Trace",
+  "type": "object",
+  "required": ["task", "skill", "version", "steps", "status"],
+  "properties": {
+    "task": {"type": "string"},
+    "skill": {"type": "string"},
+    "version": {"type": "string"},
+    "steps": {"type": "array"},
+    "status": {"type": "string"}
+  }
+}
