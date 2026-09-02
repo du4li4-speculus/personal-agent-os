@@ -1,0 +1,13 @@
+{
+  "student": "string",
+  "ability_layers": [
+    "task_response",
+    "organization",
+    "language_control",
+    "reasoning"
+  ],
+  "issues": [],
+  "evidence": [],
+  "priority": "string",
+  "confidence": "number"
+}
