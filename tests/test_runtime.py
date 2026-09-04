@@ -8,9 +8,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+
+import yaml
 
 from runtime.artifact_manager import ArtifactManager
+from runtime.capabilities import CapabilitySet
 from runtime.models import (
     ArtifactValidationError,
     LoadedSkill,
@@ -25,6 +28,7 @@ from runtime.validator_engine import ValidatorEngine
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "active-skill-repository"
 SAMPLE_SKILL = "sample"
 SAMPLE_OUTPUTS = ("result.txt",)
 
@@ -32,65 +36,25 @@ SAMPLE_OUTPUTS = ("result.txt",)
 def write_active_sample_repository(
     root: Path, *, registry_version: str = "1.0.0", manifest_version: str = "1.0.0"
 ) -> None:
+    shutil.copytree(FIXTURE_ROOT, root)
     shutil.copytree(REPOSITORY_ROOT / "contracts", root / "contracts")
-    registry_dir = root / "registry"
     runtime_dir = root / "runtime"
-    skill_dir = root / "skills" / SAMPLE_SKILL
-    schema_dir = skill_dir / "schemas"
-    source_dir = skill_dir / "src"
-    registry_dir.mkdir(parents=True)
     runtime_dir.mkdir(parents=True)
-    schema_dir.mkdir(parents=True)
-    source_dir.mkdir(parents=True)
     shutil.copy2(
         REPOSITORY_ROOT / "runtime" / "state_machine.yaml",
         runtime_dir / "state_machine.yaml",
     )
-    (registry_dir / "skill_registry.yaml").write_text(
-        "schema_version: \"1.0\"\n"
-        "skills:\n"
-        "  sample:\n"
-        f"    version: \"{registry_version}\"\n"
-        "    status: active\n"
-        "    path: skills/sample\n"
-        "    manifest: manifest.yaml\n",
-        encoding="utf-8",
+    registry_path = root / "registry" / "skill_registry.yaml"
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    registry["skills"][SAMPLE_SKILL]["version"] = registry_version
+    registry_path.write_text(
+        yaml.safe_dump(registry, sort_keys=False), encoding="utf-8"
     )
-    (skill_dir / "manifest.yaml").write_text(
-        "schema_version: \"1.0\"\n"
-        "name: sample\n"
-        f"version: \"{manifest_version}\"\n"
-        "kind: workflow\n"
-        "entrypoint:\n"
-        "  python_path: src\n"
-        "  module: sample_entry\n"
-        "  callable: execute\n"
-        "inputs:\n"
-        "  contract: schemas/input.schema.json\n"
-        "  accepted_formats: [text]\n"
-        "intermediate_outputs: []\n"
-        "outputs:\n"
-        "  - name: result\n"
-        "    path: result.txt\n"
-        "capabilities:\n"
-        "  required: [runtime.execution_proof, runtime.validation]\n"
-        "  optional: []\n"
-        "cognition:\n"
-        "  mode: optional\n"
-        "  prepare: [decision]\n"
-        "  critique: [critique]\n"
-        "  memory_review: memory\n",
-        encoding="utf-8",
-    )
-    (skill_dir / "SKILL.md").write_text(
-        "# Sample runtime test Skill\n", encoding="utf-8"
-    )
-    (schema_dir / "input.schema.json").write_text(
-        '{"$schema": "https://json-schema.org/draft/2020-12/schema"}\n',
-        encoding="utf-8",
-    )
-    (source_dir / "sample_entry.py").write_text(
-        "def execute(context):\n    return {}\n", encoding="utf-8"
+    manifest_path = root / "skills" / SAMPLE_SKILL / "manifest.yaml"
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["version"] = manifest_version
+    manifest_path.write_text(
+        yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8"
     )
 
 
@@ -103,17 +67,15 @@ class RuntimeTestCase(unittest.TestCase):
         self.output_dir = Path(self.temp_dir.name) / "output"
         self.runtime = AgentRuntime(self.repository_root)
 
-    def _write_artifacts(
-        self, context: Any, skill: LoadedSkill, *, missing: str | None = None
-    ) -> Mapping[str, Path]:
-        returned: dict[str, Path] = {}
-        for name in skill.outputs:
-            if name == missing:
-                continue
-            path = context.output_dir / name
-            path.write_text(f"fixture: {name}\n", encoding="utf-8")
-            returned[name] = Path(name)
-        return returned
+    def _run(self, *, task: str = "Run the registered fixture") -> RunResult:
+        return self.runtime.run(
+            task=task,
+            skill_name=SAMPLE_SKILL,
+            project_id="test",
+            inputs=(),
+            run_root=self.output_dir,
+            capabilities={},
+        )
 
     def test_registry_discovers_active_skill(self) -> None:
         entry = RegistryLoader(self.repository_root).get(SAMPLE_SKILL)
@@ -151,11 +113,11 @@ class RuntimeTestCase(unittest.TestCase):
         skill = SkillLoader(RegistryLoader(self.repository_root)).load(SAMPLE_SKILL)
         self.assertEqual(skill.version, "1.0.0")
         self.assertEqual(skill.outputs, SAMPLE_OUTPUTS)
-        self.assertIn("Sample runtime test Skill", skill.definition)
+        self.assertIn("Sample fixture Skill", skill.definition)
 
     def test_skill_loader_rejects_version_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory) / "repository"
             write_active_sample_repository(
                 root, registry_version="1.0.0", manifest_version="2.0.0"
             )
@@ -210,15 +172,7 @@ class RuntimeTestCase(unittest.TestCase):
             manager.validate(("result.json",), {"result.json": Path("../outside.txt")})
 
     def test_successful_end_to_end_run_produces_delivery_proof(self) -> None:
-        def executor(context: Any, skill: LoadedSkill) -> Mapping[str, Path]:
-            return self._write_artifacts(context, skill)
-
-        result = self.runtime.run(
-            task="Run the test adapter",
-            skill_name=SAMPLE_SKILL,
-            executor=executor,
-            output_dir=self.output_dir,
-        )
+        result = self._run()
         self.assertTrue(result.succeeded, result.to_dict())
         self.assertIsNotNone(result.trace_path)
         trace = json.loads(result.trace_path.read_text(encoding="utf-8"))
@@ -241,15 +195,21 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertTrue(ValidatorEngine().validate_trace_file(result.trace_path).valid)
 
     def test_missing_artifact_fails_closed_with_trace(self) -> None:
-        def executor(context: Any, skill: LoadedSkill) -> Mapping[str, Path]:
-            return self._write_artifacts(context, skill, missing=skill.outputs[0])
-
-        result = self.runtime.run(
-            task="Missing artifact test",
-            skill_name=SAMPLE_SKILL,
-            executor=executor,
-            output_dir=self.output_dir,
+        entrypoint_path = (
+            self.repository_root
+            / "skills"
+            / SAMPLE_SKILL
+            / "src"
+            / "sample_skill"
+            / "entrypoint.py"
         )
+        entrypoint_path.write_text(
+            "from runtime.models import SkillExecutionResult\n"
+            "def execute(context, skill, capabilities):\n"
+            "    return SkillExecutionResult({}, {})\n",
+            encoding="utf-8",
+        )
+        result = self._run(task="Missing artifact test")
         self.assertEqual(result.status, "FAILED")
         self.assertEqual(result.final_state, "FAILED")
         self.assertIsNotNone(result.trace_path)
@@ -257,16 +217,21 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertEqual(trace["status"], "FAILED")
         self.assertEqual(trace["errors"][-1]["code"], "ARTIFACT_MISSING")
 
-    def test_executor_exception_fails_closed(self) -> None:
-        def executor(context: Any, skill: LoadedSkill) -> Mapping[str, Path]:
-            raise ValueError("adapter broke")
-
-        result = self.runtime.run(
-            task="Executor failure test",
-            skill_name=SAMPLE_SKILL,
-            executor=executor,
-            output_dir=self.output_dir,
+    def test_entrypoint_exception_fails_closed(self) -> None:
+        entrypoint_path = (
+            self.repository_root
+            / "skills"
+            / SAMPLE_SKILL
+            / "src"
+            / "sample_skill"
+            / "entrypoint.py"
         )
+        entrypoint_path.write_text(
+            "def execute(context, skill, capabilities):\n"
+            "    raise ValueError('fixture entrypoint broke')\n",
+            encoding="utf-8",
+        )
+        result = self._run(task="Entrypoint failure test")
         self.assertEqual(result.final_state, "FAILED")
         self.assertTrue(any("EXECUTION_FAILED" in error for error in result.validation_errors))
 
@@ -274,35 +239,24 @@ class RuntimeTestCase(unittest.TestCase):
         original_check = self.runtime._runtime_check
         calls = {"count": 0}
 
-        def flaky_check(context: Any, skill: LoadedSkill) -> None:
+        def flaky_check(
+            context: Any, skill: LoadedSkill, capabilities: CapabilitySet
+        ) -> None:
             calls["count"] += 1
             if calls["count"] == 1:
                 raise RuntimeReadinessError("temporary readiness issue")
-            original_check(context, skill)
+            original_check(context, skill, capabilities)
 
         self.runtime._runtime_check = flaky_check  # type: ignore[method-assign]
 
-        result = self.runtime.run(
-            task="Recovery test",
-            skill_name=SAMPLE_SKILL,
-            executor=lambda context, skill: self._write_artifacts(context, skill),
-            output_dir=self.output_dir,
-        )
+        result = self._run(task="Recovery test")
         self.assertTrue(result.succeeded, result.to_dict())
         self.assertEqual(calls["count"], 2)
         trace = json.loads(result.trace_path.read_text(encoding="utf-8"))
         self.assertIn("RECOVERY", [item["to"] for item in trace["transitions"]])
 
     def test_validator_rejects_incomplete_proof(self) -> None:
-        def executor(context: Any, skill: LoadedSkill) -> Mapping[str, Path]:
-            return self._write_artifacts(context, skill)
-
-        result = self.runtime.run(
-            task="Proof validation test",
-            skill_name=SAMPLE_SKILL,
-            executor=executor,
-            output_dir=self.output_dir,
-        )
+        result = self._run(task="Proof validation test")
         trace = json.loads(result.trace_path.read_text(encoding="utf-8"))
         trace["proof"]["execution_traced"] = False
         validation = ValidatorEngine().validate_trace(
@@ -311,28 +265,11 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("execution_traced", " ".join(validation.errors))
 
-    def test_cli_demo_and_validation(self) -> None:
+    def test_cli_trace_validation(self) -> None:
+        result = self._run(task="CLI trace validation test")
+        self.assertTrue(result.succeeded, result.to_dict())
         environment = dict(os.environ)
         environment["PYTHONPATH"] = str(REPOSITORY_ROOT)
-        run = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "runtime.cli",
-                "run-demo",
-                "--skill",
-                SAMPLE_SKILL,
-                "--output-dir",
-                str(self.output_dir),
-                "--repository-root",
-                str(self.repository_root),
-            ],
-            cwd=REPOSITORY_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         validate = subprocess.run(
             [
                 sys.executable,

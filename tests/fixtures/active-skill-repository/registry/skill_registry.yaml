@@ -1,0 +1,7 @@
+schema_version: "1.0"
+skills:
+  sample:
+    version: "1.0.0"
+    status: active
+    path: skills/sample
+    manifest: manifest.yaml

@@ -6,8 +6,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 from uuid import uuid4
+
+
+CapabilityProvider = Callable[[str, Mapping[str, Any]], Mapping[str, Any]]
 
 
 def utc_now() -> str:
@@ -178,6 +181,13 @@ class AgentRole:
 
 
 @dataclass(frozen=True)
+class InputRef:
+    path: Path
+    role: str
+    media_type: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class LoadedSkill:
     name: str
     version: str
@@ -221,9 +231,10 @@ class RunContext:
     run_id: str
     task: str
     skill_name: str
+    project_id: str
     repository_root: Path
     output_dir: Path
-    input_path: Optional[Path] = None
+    inputs: Tuple[InputRef, ...] = ()
 
     @classmethod
     def create(
@@ -231,18 +242,46 @@ class RunContext:
         *,
         task: str,
         skill_name: str,
+        project_id: str,
         repository_root: Path,
         output_dir: Path,
-        input_path: Optional[Path] = None,
+        inputs: Tuple[InputRef, ...] = (),
     ) -> "RunContext":
         return cls(
             run_id=str(uuid4()),
             task=task,
             skill_name=skill_name,
+            project_id=project_id,
             repository_root=repository_root.resolve(),
             output_dir=output_dir.resolve(),
-            input_path=input_path.resolve() if input_path else None,
+            inputs=tuple(
+                InputRef(
+                    path=Path(input_ref.path).resolve(),
+                    role=input_ref.role,
+                    media_type=input_ref.media_type,
+                )
+                for input_ref in inputs
+            ),
         )
+
+    @property
+    def input_path(self) -> Optional[Path]:
+        """Compatibility projection until Task 6 records all staged inputs."""
+
+        return self.inputs[0].path if len(self.inputs) == 1 else None
+
+
+@dataclass(frozen=True)
+class SkillExecutionResult:
+    intermediate_artifacts: Mapping[str, Path]
+    artifacts: Mapping[str, Path]
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+SkillEntrypoint = Callable[
+    [RunContext, LoadedSkill, "CapabilitySet"],
+    SkillExecutionResult,
+]
 
 
 @dataclass(frozen=True)

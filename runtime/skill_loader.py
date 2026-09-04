@@ -76,6 +76,14 @@ class SkillLoader:
         )
         if violations:
             violation = violations[0]
+            if (
+                violation.path == "$.entrypoint.python_path"
+                and violation.keyword == "not"
+            ):
+                raise SkillLoadError(
+                    f"Entrypoint python_path escapes Skill root: {violation.message}",
+                    code="ENTRYPOINT_PATH_ESCAPE",
+                )
             raise SkillLoadError(
                 "Skill manifest contract violation at "
                 f"{violation.path} ({violation.keyword}): {violation.message}",
@@ -111,7 +119,7 @@ class SkillLoader:
             entrypoint_root = _resolve_skill_reference(
                 skill_dir,
                 contract.entrypoint.python_path,
-                code="SKILL_ENTRYPOINT_PATH_ESCAPE",
+                code="ENTRYPOINT_PATH_ESCAPE",
                 label="entrypoint python_path",
             )
             if not entrypoint_root.is_dir():

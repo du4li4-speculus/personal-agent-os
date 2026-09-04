@@ -2,31 +2,29 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Optional
 
 from .artifact_manager import ArtifactManager
+from .capabilities import CapabilitySet
+from .entrypoint_loader import EntrypointLoader
 from .execution_logger import ExecutionLogger
 from .models import (
     AgentRuntimeError,
+    CapabilityProvider,
     ExecutionError,
+    InputRef,
     LoadedSkill,
     RunContext,
     RunResult,
     RuntimeReadinessError,
+    SkillExecutionResult,
 )
 from .registry_loader import RegistryLoader
 from .skill_loader import SkillLoader
 from .state_manager import StateManager
 from .validator_engine import ValidatorEngine
-
-
-Executor = Callable[[RunContext, LoadedSkill], Mapping[str, Union[str, Path]]]
-SUPPORTED_RUNTIME_CAPABILITIES = {
-    "runtime.execution_proof",
-    "runtime.validation",
-}
 
 
 class AgentRuntime:
@@ -36,6 +34,7 @@ class AgentRuntime:
         self.repository_root = repository_root.resolve()
         self.registry_loader = RegistryLoader(self.repository_root)
         self.skill_loader = SkillLoader(self.registry_loader)
+        self.entrypoint_loader = EntrypointLoader()
         self.state_machine_path = self.repository_root / "runtime" / "state_machine.yaml"
         self.validator = ValidatorEngine()
 
@@ -44,17 +43,20 @@ class AgentRuntime:
         *,
         task: str,
         skill_name: str,
-        executor: Executor,
-        output_dir: Path,
-        input_path: Optional[Path] = None,
+        project_id: str,
+        inputs: Sequence[InputRef],
+        run_root: Path,
+        capabilities: Mapping[str, CapabilityProvider],
     ) -> RunResult:
         context = RunContext.create(
             task=task,
             skill_name=skill_name,
+            project_id=project_id,
             repository_root=self.repository_root,
-            output_dir=Path(output_dir),
-            input_path=Path(input_path) if input_path else None,
+            output_dir=Path(run_root),
+            inputs=tuple(inputs),
         )
+        capability_set = CapabilitySet(capabilities)
         state_manager = StateManager.from_file(self.state_machine_path)
         logger = ExecutionLogger(context)
         logger.record_transition(None, "CREATED", reason="run_created")
@@ -62,8 +64,15 @@ class AgentRuntime:
         try:
             self._move(state_manager, logger, "IDENTIFY_TASK", "task_identified")
             self._require_task(context.task)
+            self._require_project_id(context.project_id)
             logger.record_step(
-                "IDENTIFY_TASK", "success", details={"task": context.task}
+                "IDENTIFY_TASK",
+                "success",
+                details={
+                    "task": context.task,
+                    "project_id": context.project_id,
+                    "input_count": len(context.inputs),
+                },
             )
 
             self._move(state_manager, logger, "FIND_SKILL", "skill_lookup")
@@ -76,6 +85,7 @@ class AgentRuntime:
 
             self._move(state_manager, logger, "LOAD_SKILL", "skill_contract_load")
             skill = self.skill_loader.load(context.skill_name)
+            entrypoint = self.entrypoint_loader.load(skill)
             logger.set_skill_version(skill.version)
             logger.set_proof(skill_loaded=True)
             logger.record_step(
@@ -88,26 +98,44 @@ class AgentRuntime:
             )
 
             self._move(state_manager, logger, "RUNTIME_CHECK", "runtime_readiness")
-            self._runtime_check_with_recovery(context, skill, state_manager, logger)
+            self._runtime_check_with_recovery(
+                context, skill, capability_set, state_manager, logger
+            )
 
-            self._move(state_manager, logger, "EXECUTE", "adapter_execution")
+            self._move(state_manager, logger, "EXECUTE", "skill_entrypoint_execution")
             try:
-                returned_artifacts = executor(context, skill)
+                execution_result = entrypoint(context, skill, capability_set)
             except AgentRuntimeError:
                 raise
             except Exception as exc:
-                raise ExecutionError(f"Skill executor failed: {exc}") from exc
-            if not isinstance(returned_artifacts, Mapping):
-                raise ExecutionError("Skill executor must return an artifact mapping")
+                raise ExecutionError(f"Skill entrypoint failed: {exc}") from exc
+            if not isinstance(execution_result, SkillExecutionResult):
+                raise ExecutionError(
+                    "Skill entrypoint must return SkillExecutionResult",
+                    code="SKILL_RESULT_INVALID",
+                )
+            if not isinstance(execution_result.artifacts, Mapping) or not isinstance(
+                execution_result.intermediate_artifacts, Mapping
+            ):
+                raise ExecutionError(
+                    "SkillExecutionResult artifact collections must be mappings",
+                    code="SKILL_RESULT_INVALID",
+                )
             logger.record_step(
                 "EXECUTE",
                 "success",
-                details={"returned_artifacts": sorted(returned_artifacts.keys())},
+                details={
+                    "returned_artifacts": sorted(execution_result.artifacts.keys()),
+                    "intermediate_artifacts": sorted(
+                        execution_result.intermediate_artifacts.keys()
+                    ),
+                    "metadata_keys": sorted(execution_result.metadata.keys()),
+                },
             )
 
             self._move(state_manager, logger, "ARTIFACT", "artifact_gate")
             artifacts = ArtifactManager(context.output_dir).validate(
-                skill.outputs, returned_artifacts
+                skill.outputs, execution_result.artifacts
             )
             logger.set_artifacts(artifacts)
             logger.record_step(
@@ -155,6 +183,13 @@ class AgentRuntime:
             )
 
     @staticmethod
+    def _require_project_id(project_id: str) -> None:
+        if not isinstance(project_id, str) or not project_id.strip():
+            raise AgentRuntimeError(
+                "Project id must be a non-empty string", code="PROJECT_ID_INVALID"
+            )
+
+    @staticmethod
     def _move(
         state_manager: StateManager,
         logger: ExecutionLogger,
@@ -169,6 +204,7 @@ class AgentRuntime:
     def _runtime_check(
         context: RunContext,
         skill: LoadedSkill,
+        capabilities: CapabilitySet,
     ) -> None:
         output_dir = context.output_dir
         if output_dir.exists() and not output_dir.is_dir():
@@ -187,13 +223,16 @@ class AgentRuntime:
                 code="OUTPUT_DIRECTORY_NOT_WRITABLE",
             ) from exc
 
-        if context.input_path is not None and not context.input_path.is_file():
-            raise AgentRuntimeError(
-                f"Input path does not exist: {context.input_path}",
-                code="INPUT_NOT_FOUND",
-            )
+        for input_ref in context.inputs:
+            if not input_ref.path.is_file():
+                raise AgentRuntimeError(
+                    f"Input path does not exist: {input_ref.path}",
+                    code="INPUT_NOT_FOUND",
+                )
         missing_capabilities = sorted(
-            set(skill.requires) - SUPPORTED_RUNTIME_CAPABILITIES
+            capability_id
+            for capability_id in skill.contract.required_capabilities
+            if not capabilities.has(capability_id)
         )
         if missing_capabilities:
             raise AgentRuntimeError(
@@ -206,12 +245,13 @@ class AgentRuntime:
         self,
         context: RunContext,
         skill: LoadedSkill,
+        capabilities: CapabilitySet,
         state_manager: StateManager,
         logger: ExecutionLogger,
     ) -> None:
         while True:
             try:
-                self._runtime_check(context, skill)
+                self._runtime_check(context, skill, capabilities)
                 logger.set_proof(runtime_checked=True)
                 logger.record_step("RUNTIME_CHECK", "success")
                 return
