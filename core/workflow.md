@@ -2,6 +2,8 @@
 
 This document is the human-readable companion to `runtime/state_machine.yaml`. The Runtime is responsible for enforcing this lifecycle and for producing an execution trace for every attempted run.
 
+The canonical Runtime ownership contract is `docs/policies/RUNTIME_POLICY.md`. Memory Candidate and promotion boundaries are canonical in `docs/policies/MEMORY_POLICY.md`. This document describes currently executable behavior; it does not claim that planned Cognition hooks or Registry entrypoints already execute.
+
 ## Lifecycle
 
 ```text
@@ -63,6 +65,8 @@ def execute(context: RunContext, skill: LoadedSkill) -> Mapping[str, str | Path]
 
 The returned mapping must contain exactly the output names declared in the Skill manifest. Paths are relative to the run output directory. Domain-specific assessment and PDF/content validation remain inside the Skill adapter or a future Skill validator.
 
+The caller-provided adapter is current pre-v0.3+ behavior. ADR-0003 requires its replacement by a Registry-resolved Skill entrypoint at Task 5; until that commit lands, Registry discovery and execution remain separate operations.
+
 ## Version and failure policy
 
 Registry and manifest versions must match exactly. The Runtime does not silently select a version or downgrade a contract. Any mismatch, missing contract, illegal transition, adapter failure, missing artifact, or invalid proof ends in `FAILED`.
@@ -72,12 +76,19 @@ Registry and manifest versions must match exactly. The Runtime does not silently
 From the repository root, after installing `requirements.txt`:
 
 ```bash
-python -m unittest discover -s tests -v
-python -m runtime.cli run-demo \
+python3 -m unittest discover -s tests -v
+python3 -m runtime.cli run-demo \
   --skill toefl-writing-grader \
   --output-dir /tmp/personal-agent-os-runtime-demo
-python -m runtime.cli validate-trace \
+python3 -m runtime.cli validate-trace \
   --trace /tmp/personal-agent-os-runtime-demo/execution_trace.json
 ```
 
 `run-demo` creates labeled fixture artifacts. They are smoke-test outputs and must not be presented as a real TOEFL assessment.
+
+## Governance references
+
+- Runtime policy: `docs/policies/RUNTIME_POLICY.md`
+- Memory policy: `docs/policies/MEMORY_POLICY.md`
+- Project boundary: `docs/policies/PROJECT_BOUNDARY_POLICY.md`
+- Accepted lifecycle decisions: `docs/adr/README.md`
