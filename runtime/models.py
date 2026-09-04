@@ -42,6 +42,11 @@ class RegistryError(AgentRuntimeError):
         super().__init__(message, code=code)
 
 
+class ContractError(AgentRuntimeError):
+    def __init__(self, message: str, *, code: str = "CONTRACT_INVALID") -> None:
+        super().__init__(message, code=code)
+
+
 class SkillLoadError(AgentRuntimeError):
     def __init__(self, message: str, *, code: str = "SKILL_CONTRACT_INVALID") -> None:
         super().__init__(message, code=code)
@@ -80,12 +85,96 @@ class TraceValidationError(AgentRuntimeError):
 
 @dataclass(frozen=True)
 class RegistryEntry:
+    schema_version: str
     name: str
     version: str
-    skill_type: str
     status: str
     path: str
+    manifest: str
     resolved_path: Path
+
+
+@dataclass(frozen=True)
+class EntrypointSpec:
+    python_path: str
+    module: str
+    callable: str
+
+
+@dataclass(frozen=True)
+class ArtifactSpec:
+    name: str
+    path: str
+    schema: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CapabilityRequirement:
+    required: Tuple[str, ...]
+    optional: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SkillManifest:
+    name: str
+    version: str
+    kind: str
+    entrypoint: Optional[EntrypointSpec]
+    inputs: Mapping[str, Any]
+    intermediate_outputs: Tuple[ArtifactSpec, ...]
+    outputs: Tuple[ArtifactSpec, ...]
+    required_capabilities: Tuple[str, ...]
+    optional_capabilities: Tuple[str, ...]
+    cognition: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class ProjectConfig:
+    schema_version: str
+    project_id: str
+    allowed_skills: Tuple[str, ...]
+    cognition_mode: str
+    memory_policy: str
+
+
+@dataclass(frozen=True)
+class RunRecord:
+    schema_version: str
+    run_id: str
+    project_id: str
+    skill_name: str
+    skill_version: str
+    state: str
+    input_refs: Tuple[str, ...]
+    artifact_refs: Tuple[str, ...]
+    trace_ref: str
+
+
+@dataclass(frozen=True)
+class MemoryCandidate:
+    schema_version: str
+    candidate_id: str
+    project_id: str
+    run_id: str
+    scope: str
+    target_id: str
+    proposition: str
+    evidence_refs: Tuple[str, ...]
+    status: str
+
+
+@dataclass(frozen=True)
+class AgentRole:
+    schema_version: str
+    name: str
+    objective: str
+    responsibility: str
+    inputs: Tuple[str, ...]
+    outputs: Tuple[str, ...]
+    constraints: Tuple[str, ...]
+    evaluation_criteria: Tuple[str, ...]
+    why_agent_required: str
+    why_skill_insufficient: str
 
 
 @dataclass(frozen=True)
@@ -96,6 +185,7 @@ class LoadedSkill:
     skill_path: Path
     definition: str
     manifest: Mapping[str, Any]
+    contract: SkillManifest
     outputs: Tuple[str, ...]
     requires: Tuple[str, ...]
 
@@ -109,6 +199,7 @@ class LoadedSkill:
         skill_path: Path,
         definition: str,
         manifest: Mapping[str, Any],
+        contract: SkillManifest,
         outputs: Tuple[str, ...],
         requires: Tuple[str, ...],
     ) -> "LoadedSkill":
@@ -119,6 +210,7 @@ class LoadedSkill:
             skill_path=skill_path,
             definition=definition,
             manifest=MappingProxyType(dict(manifest)),
+            contract=contract,
             outputs=outputs,
             requires=requires,
         )

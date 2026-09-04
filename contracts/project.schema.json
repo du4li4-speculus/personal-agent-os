@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/project.schema.json",
+  "title": "Agent OS Project Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_id",
+    "allowed_skills",
+    "cognition_mode",
+    "memory_policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "project_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "allowed_skills": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": ".*\\S.*"}
+    },
+    "cognition_mode": {"enum": ["disabled", "optional", "required"]},
+    "memory_policy": {"const": "candidate_only"}
+  }
+}

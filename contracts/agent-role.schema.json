@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/agent-role.schema.json",
+  "title": "Agent OS Agent Role",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "objective",
+    "responsibility",
+    "inputs",
+    "outputs",
+    "constraints",
+    "evaluation_criteria",
+    "why_agent_required",
+    "why_skill_insufficient"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "name": {"$ref": "#/$defs/nonblank"},
+    "objective": {"$ref": "#/$defs/nonblank"},
+    "responsibility": {"$ref": "#/$defs/nonblank"},
+    "inputs": {"$ref": "#/$defs/nonempty_strings"},
+    "outputs": {"$ref": "#/$defs/nonempty_strings"},
+    "constraints": {"$ref": "#/$defs/nonempty_strings"},
+    "evaluation_criteria": {"$ref": "#/$defs/nonempty_strings"},
+    "why_agent_required": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+    "why_skill_insufficient": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"}
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "nonempty_strings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/nonblank"}
+    }
+  }
+}

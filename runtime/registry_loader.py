@@ -13,6 +13,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - depends on environment
 else:
     _YAML_IMPORT_ERROR = None
 
+from .contract_validator import ContractValidator
 from .models import DependencyError, RegistryEntry, RegistryError
 
 
@@ -27,14 +28,26 @@ class RegistryLoader:
             else self.repository_root / "registry" / "skill_registry.yaml"
         )
         self.skills_root = (self.repository_root / "skills").resolve()
+        self.contract_validator = ContractValidator(self.repository_root)
         self._entries: Dict[str, RegistryEntry] | None = None
 
     def load(self) -> Mapping[str, RegistryEntry]:
         if self._entries is not None:
             return self._entries
         document = _read_yaml(self.registry_path)
-        if not isinstance(document, dict) or not isinstance(document.get("skills"), dict):
-            raise RegistryError("Registry must contain a top-level 'skills' mapping")
+        violations = self.contract_validator.validate(
+            document,
+            self.repository_root / "contracts" / "skill-registry.schema.json",
+        )
+        if violations:
+            violation = violations[0]
+            raise RegistryError(
+                "Registry contract violation at "
+                f"{violation.path} ({violation.keyword}): {violation.message}",
+                code="REGISTRY_SCHEMA_INVALID",
+            )
+
+        schema_version = document["schema_version"]
 
         entries: Dict[str, RegistryEntry] = {}
         for name, raw in document["skills"].items():
@@ -42,7 +55,9 @@ class RegistryLoader:
                 raise RegistryError("Every registry skill key must be a non-empty string")
             if not isinstance(raw, dict):
                 raise RegistryError(f"Registry entry for {name!r} must be a mapping")
-            entry = _entry_from_mapping(name, raw, self.skills_root)
+            entry = _entry_from_mapping(
+                name, raw, self.skills_root, schema_version=schema_version
+            )
             if name in entries:
                 raise RegistryError(f"Duplicate registry skill: {name}")
             entries[name] = entry
@@ -50,6 +65,17 @@ class RegistryLoader:
         return entries
 
     def get(self, skill_name: str) -> RegistryEntry:
+        entry = self.get_registered(skill_name)
+        if entry.status != "active":
+            raise RegistryError(
+                f"Skill is not active: {skill_name} ({entry.status})",
+                code="SKILL_NOT_ACTIVE",
+            )
+        return entry
+
+    def get_registered(self, skill_name: str) -> RegistryEntry:
+        """Return a Registry entry without granting execution authority."""
+
         entries = self.load()
         try:
             entry = entries[skill_name]
@@ -57,11 +83,6 @@ class RegistryLoader:
             raise RegistryError(
                 f"Skill is not registered: {skill_name}", code="SKILL_NOT_FOUND"
             ) from exc
-        if entry.status != "active":
-            raise RegistryError(
-                f"Skill is not active: {skill_name} ({entry.status})",
-                code="SKILL_NOT_ACTIVE",
-            )
         return entry
 
 
@@ -80,34 +101,31 @@ def _read_yaml(path: Path) -> Any:
 
 
 def _entry_from_mapping(
-    name: str, raw: Mapping[str, Any], skills_root: Path
+    name: str,
+    raw: Mapping[str, Any],
+    skills_root: Path,
+    *,
+    schema_version: str,
 ) -> RegistryEntry:
-    required = ("version", "type", "status", "path")
-    missing = [key for key in required if key not in raw]
-    if missing:
-        raise RegistryError(f"Registry entry {name!r} is missing: {', '.join(missing)}")
-    values = {key: raw[key] for key in required}
-    if any(not isinstance(values[key], str) or not values[key].strip() for key in required):
-        raise RegistryError(f"Registry entry {name!r} has invalid string fields")
-
-    relative_path = Path(values["path"])
+    relative_path = Path(raw["path"])
     if relative_path.is_absolute():
-        raise RegistryError(f"Skill path must be relative: {values['path']}")
+        raise RegistryError(f"Skill path must be relative: {raw['path']}")
     resolved = (skills_root.parent / relative_path).resolve()
     try:
         resolved.relative_to(skills_root)
     except ValueError as exc:
-        raise RegistryError(f"Skill path escapes skills directory: {values['path']}") from exc
+        raise RegistryError(f"Skill path escapes skills directory: {raw['path']}") from exc
     if not resolved.is_dir():
         raise RegistryError(
             f"Skill directory does not exist: {resolved}", code="SKILL_PATH_MISSING"
         )
 
     return RegistryEntry(
+        schema_version=schema_version,
         name=name,
-        version=values["version"],
-        skill_type=values["type"],
-        status=values["status"],
-        path=values["path"],
+        version=raw["version"],
+        status=raw["status"],
+        path=raw["path"],
+        manifest=raw["manifest"],
         resolved_path=resolved,
     )

@@ -1,23 +1,38 @@
+schema_version: "1.0"
 name: toefl-writing-grader
-version: 2.0.0
-type: assessment
+version: "2.0.0"
+kind: workflow
 inputs:
-  - text
-  - image
-  - screenshot
-  - pdf
-  - document
-  - pages
-outputs:
-  - assessment.json
-  - diagnosis.json
-  - learning_loop.json
-  - student_report.pdf
-  - parent_report.pdf
-  - teacher_dashboard.json
+  contract: schemas/source_bundle.schema.json
+  accepted_formats: [text, image, screenshot, pdf, document, pages]
 intermediate_outputs:
-  - source_bundle.json
-  - evidence.json
-requires:
-  - runtime.execution_proof
-  - runtime.validation
+  - name: source_bundle
+    path: work/source_bundle.json
+    schema: schemas/source_bundle.schema.json
+  - name: evidence
+    path: work/evidence.json
+    schema: schemas/evidence.schema.json
+outputs:
+  - name: assessment
+    path: artifacts/assessment.json
+    schema: schemas/assessment.schema.json
+  - name: diagnosis
+    path: artifacts/diagnosis.json
+    schema: schemas/diagnostic.schema.json
+  - name: learning_loop
+    path: artifacts/learning_loop.json
+    schema: schemas/learning_loop.schema.json
+  - name: student_report
+    path: artifacts/student_report.pdf
+  - name: parent_report
+    path: artifacts/parent_report.pdf
+  - name: teacher_dashboard
+    path: artifacts/teacher_dashboard.json
+capabilities:
+  required: [runtime.execution_proof, runtime.schema_validation]
+  optional: [document.extract_text, image.transcribe, pages.snappy]
+cognition:
+  mode: optional
+  prepare: [expansion, decision]
+  critique: [critique]
+  memory_review: memory

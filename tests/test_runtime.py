@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,22 +25,83 @@ from runtime.validator_engine import ValidatorEngine
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-TOEFL_OUTPUTS = (
-    "assessment.json",
-    "diagnosis.json",
-    "learning_loop.json",
-    "student_report.pdf",
-    "parent_report.pdf",
-    "teacher_dashboard.json",
-)
+SAMPLE_SKILL = "sample"
+SAMPLE_OUTPUTS = ("result.txt",)
+
+
+def write_active_sample_repository(
+    root: Path, *, registry_version: str = "1.0.0", manifest_version: str = "1.0.0"
+) -> None:
+    shutil.copytree(REPOSITORY_ROOT / "contracts", root / "contracts")
+    registry_dir = root / "registry"
+    runtime_dir = root / "runtime"
+    skill_dir = root / "skills" / SAMPLE_SKILL
+    schema_dir = skill_dir / "schemas"
+    source_dir = skill_dir / "src"
+    registry_dir.mkdir(parents=True)
+    runtime_dir.mkdir(parents=True)
+    schema_dir.mkdir(parents=True)
+    source_dir.mkdir(parents=True)
+    shutil.copy2(
+        REPOSITORY_ROOT / "runtime" / "state_machine.yaml",
+        runtime_dir / "state_machine.yaml",
+    )
+    (registry_dir / "skill_registry.yaml").write_text(
+        "schema_version: \"1.0\"\n"
+        "skills:\n"
+        "  sample:\n"
+        f"    version: \"{registry_version}\"\n"
+        "    status: active\n"
+        "    path: skills/sample\n"
+        "    manifest: manifest.yaml\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "manifest.yaml").write_text(
+        "schema_version: \"1.0\"\n"
+        "name: sample\n"
+        f"version: \"{manifest_version}\"\n"
+        "kind: workflow\n"
+        "entrypoint:\n"
+        "  python_path: src\n"
+        "  module: sample_entry\n"
+        "  callable: execute\n"
+        "inputs:\n"
+        "  contract: schemas/input.schema.json\n"
+        "  accepted_formats: [text]\n"
+        "intermediate_outputs: []\n"
+        "outputs:\n"
+        "  - name: result\n"
+        "    path: result.txt\n"
+        "capabilities:\n"
+        "  required: [runtime.execution_proof, runtime.validation]\n"
+        "  optional: []\n"
+        "cognition:\n"
+        "  mode: optional\n"
+        "  prepare: [decision]\n"
+        "  critique: [critique]\n"
+        "  memory_review: memory\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "SKILL.md").write_text(
+        "# Sample runtime test Skill\n", encoding="utf-8"
+    )
+    (schema_dir / "input.schema.json").write_text(
+        '{"$schema": "https://json-schema.org/draft/2020-12/schema"}\n',
+        encoding="utf-8",
+    )
+    (source_dir / "sample_entry.py").write_text(
+        "def execute(context):\n    return {}\n", encoding="utf-8"
+    )
 
 
 class RuntimeTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
+        self.repository_root = Path(self.temp_dir.name) / "repository"
+        write_active_sample_repository(self.repository_root)
         self.output_dir = Path(self.temp_dir.name) / "output"
-        self.runtime = AgentRuntime(REPOSITORY_ROOT)
+        self.runtime = AgentRuntime(self.repository_root)
 
     def _write_artifacts(
         self, context: Any, skill: LoadedSkill, *, missing: str | None = None
@@ -54,8 +116,8 @@ class RuntimeTestCase(unittest.TestCase):
         return returned
 
     def test_registry_discovers_active_skill(self) -> None:
-        entry = RegistryLoader(REPOSITORY_ROOT).get("toefl-writing-grader")
-        self.assertEqual(entry.version, "2.0.0")
+        entry = RegistryLoader(self.repository_root).get(SAMPLE_SKILL)
+        self.assertEqual(entry.version, "1.0.0")
         self.assertTrue(entry.resolved_path.is_dir())
 
     def test_registry_rejects_unknown_skill(self) -> None:
@@ -65,52 +127,37 @@ class RuntimeTestCase(unittest.TestCase):
     def test_registry_rejects_path_escape(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            shutil.copytree(REPOSITORY_ROOT / "contracts", root / "contracts")
             (root / "registry").mkdir()
             (root / "skills").mkdir()
             (root / "outside").mkdir()
+            (root / "skills" / "escaped").symlink_to(
+                root / "outside", target_is_directory=True
+            )
             (root / "registry" / "skill_registry.yaml").write_text(
+                "schema_version: \"1.0\"\n"
                 "skills:\n"
                 "  escaped:\n"
-                "    version: 1.0.0\n"
-                "    type: test\n"
+                "    version: \"1.0.0\"\n"
                 "    status: active\n"
-                "    path: skills/../outside\n",
+                "    path: skills/escaped\n"
+                "    manifest: manifest.yaml\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(Exception, "escapes"):
                 RegistryLoader(root).load()
 
     def test_skill_loader_reads_contract(self) -> None:
-        skill = SkillLoader(RegistryLoader(REPOSITORY_ROOT)).load(
-            "toefl-writing-grader"
-        )
-        self.assertEqual(skill.version, "2.0.0")
-        self.assertEqual(skill.outputs, TOEFL_OUTPUTS)
-        self.assertIn("Never assess without source evidence", skill.definition)
+        skill = SkillLoader(RegistryLoader(self.repository_root)).load(SAMPLE_SKILL)
+        self.assertEqual(skill.version, "1.0.0")
+        self.assertEqual(skill.outputs, SAMPLE_OUTPUTS)
+        self.assertIn("Sample runtime test Skill", skill.definition)
 
     def test_skill_loader_rejects_version_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            skill_dir = root / "skills" / "sample"
-            skill_dir.mkdir(parents=True)
-            (root / "registry").mkdir()
-            (skill_dir / "SKILL.md").write_text("# Sample\n", encoding="utf-8")
-            (skill_dir / "manifest.yaml").write_text(
-                "name: sample\n"
-                "version: 2.0.0\n"
-                "type: assessment\n"
-                "outputs: [result.json]\n"
-                "requires: []\n",
-                encoding="utf-8",
-            )
-            (root / "registry" / "skill_registry.yaml").write_text(
-                "skills:\n"
-                "  sample:\n"
-                "    version: 1.0.0\n"
-                "    type: assessment\n"
-                "    status: active\n"
-                "    path: skills/sample\n",
-                encoding="utf-8",
+            write_active_sample_repository(
+                root, registry_version="1.0.0", manifest_version="2.0.0"
             )
             loader = SkillLoader(RegistryLoader(root))
             with self.assertRaisesRegex(Exception, "version"):
@@ -168,7 +215,7 @@ class RuntimeTestCase(unittest.TestCase):
 
         result = self.runtime.run(
             task="Run the test adapter",
-            skill_name="toefl-writing-grader",
+            skill_name=SAMPLE_SKILL,
             executor=executor,
             output_dir=self.output_dir,
         )
@@ -199,7 +246,7 @@ class RuntimeTestCase(unittest.TestCase):
 
         result = self.runtime.run(
             task="Missing artifact test",
-            skill_name="toefl-writing-grader",
+            skill_name=SAMPLE_SKILL,
             executor=executor,
             output_dir=self.output_dir,
         )
@@ -216,7 +263,7 @@ class RuntimeTestCase(unittest.TestCase):
 
         result = self.runtime.run(
             task="Executor failure test",
-            skill_name="toefl-writing-grader",
+            skill_name=SAMPLE_SKILL,
             executor=executor,
             output_dir=self.output_dir,
         )
@@ -237,7 +284,7 @@ class RuntimeTestCase(unittest.TestCase):
 
         result = self.runtime.run(
             task="Recovery test",
-            skill_name="toefl-writing-grader",
+            skill_name=SAMPLE_SKILL,
             executor=lambda context, skill: self._write_artifacts(context, skill),
             output_dir=self.output_dir,
         )
@@ -252,7 +299,7 @@ class RuntimeTestCase(unittest.TestCase):
 
         result = self.runtime.run(
             task="Proof validation test",
-            skill_name="toefl-writing-grader",
+            skill_name=SAMPLE_SKILL,
             executor=executor,
             output_dir=self.output_dir,
         )
@@ -274,9 +321,11 @@ class RuntimeTestCase(unittest.TestCase):
                 "runtime.cli",
                 "run-demo",
                 "--skill",
-                "toefl-writing-grader",
+                SAMPLE_SKILL,
                 "--output-dir",
                 str(self.output_dir),
+                "--repository-root",
+                str(self.repository_root),
             ],
             cwd=REPOSITORY_ROOT,
             env=environment,
