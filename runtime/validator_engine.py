@@ -18,6 +18,8 @@ REQUIRED_TRACE_FIELDS = {
     "version",
     "input_refs",
     "run_record",
+    "cognition_policy",
+    "cognition",
     "started_at",
     "finished_at",
     "transitions",
@@ -139,6 +141,11 @@ class ValidatorEngine:
                     errors.append("Trace contains an invalid state transition")
 
         self._validate_run_record(trace, errors)
+        self._validate_cognition(
+            trace,
+            errors,
+            require_deliverable=require_deliverable,
+        )
 
         resolved_run_root: Path | None = None
         artifact_dir: Path | None = None
@@ -150,6 +157,7 @@ class ValidatorEngine:
             if resolved_run_root.parent.name != trace.get("project_id"):
                 errors.append("Run root does not match trace project_id")
             self._validate_run_refs(trace, resolved_run_root, errors)
+            self._validate_cognition_refs(trace, resolved_run_root, errors)
         elif output_dir is not None:
             artifact_dir = Path(output_dir).resolve()
 
@@ -163,6 +171,149 @@ class ValidatorEngine:
             else:
                 errors.extend(artifact_errors)
         return ValidationResult(not errors, tuple(errors))
+
+    @staticmethod
+    def _validate_cognition(
+        trace: Mapping[str, Any],
+        errors: list[str],
+        *,
+        require_deliverable: bool,
+    ) -> None:
+        policy = trace.get("cognition_policy")
+        records = trace.get("cognition")
+        if not isinstance(policy, dict):
+            if require_deliverable:
+                errors.append("Deliverable trace must include Cognition policy")
+            return
+        if set(policy) != {"skill_mode", "project_mode", "effective_mode"}:
+            errors.append("Cognition policy fields are invalid")
+        skill_mode = policy.get("skill_mode")
+        project_mode = policy.get("project_mode")
+        effective_mode = policy.get("effective_mode")
+        valid_modes = {"disabled", "optional", "required"}
+        if not all(
+            isinstance(mode, str) and mode in valid_modes
+            for mode in (skill_mode, project_mode, effective_mode)
+        ):
+            errors.append("Cognition effective mode is invalid")
+        else:
+            if skill_mode == "required":
+                expected_mode = "required"
+            elif skill_mode == "disabled" and project_mode == "required":
+                expected_mode = None
+            elif skill_mode == "disabled":
+                expected_mode = "disabled"
+            elif project_mode == "required":
+                expected_mode = "required"
+            elif project_mode == "disabled":
+                expected_mode = "disabled"
+            else:
+                expected_mode = "optional"
+            if expected_mode is None:
+                errors.append("Trace contains a conflicting Cognition policy")
+            elif effective_mode != expected_mode:
+                errors.append("Trace Cognition policy precedence is invalid")
+        if not isinstance(records, list):
+            errors.append("Trace cognition must be a list")
+            return
+
+        expected_phases = [
+            "COGNITION_PREPARE",
+            "COGNITION_CRITIQUE",
+            "MEMORY_REVIEW",
+        ]
+        actual_phases: list[str] = []
+        for record in records:
+            if not isinstance(record, dict):
+                errors.append("Cognition record must be a mapping")
+                continue
+            phase = record.get("phase")
+            if not isinstance(phase, str):
+                errors.append("Cognition phase must be a string")
+                continue
+            actual_phases.append(phase)
+            if record.get("effective_mode") != effective_mode:
+                errors.append(f"Cognition phase policy mismatch: {phase}")
+            if not isinstance(record.get("protocols"), list):
+                errors.append(f"Cognition protocols must be a list: {phase}")
+            if not isinstance(record.get("proposal_fields"), list):
+                errors.append(f"Cognition proposal_fields must be a list: {phase}")
+            loaded = record.get("loaded")
+            executed = record.get("executed")
+            validated = record.get("validated")
+            changed = record.get("changed_run_disposition")
+            status = record.get("status")
+            outcome = record.get("provider_outcome")
+            if not all(
+                isinstance(value, bool)
+                for value in (loaded, executed, validated, changed)
+            ):
+                errors.append(f"Cognition proof flags must be booleans: {phase}")
+                continue
+            if executed and not loaded:
+                errors.append(f"Cognition executed without a loaded protocol: {phase}")
+            if validated and not executed:
+                errors.append(f"Cognition validated without provider execution: {phase}")
+            if status == "skipped":
+                if executed or validated or changed or outcome is not None:
+                    errors.append(f"Skipped Cognition record is inconsistent: {phase}")
+            elif status == "executed":
+                if not executed or not validated or changed or not isinstance(outcome, str):
+                    errors.append(f"Executed Cognition record is inconsistent: {phase}")
+            elif isinstance(status, str) and status in {"blocked", "review_required"}:
+                if not changed:
+                    errors.append(f"Blocking Cognition record did not change disposition: {phase}")
+            else:
+                errors.append(f"Cognition status is invalid: {phase}")
+            if effective_mode == "required" and status == "skipped":
+                errors.append(f"Required Cognition phase was skipped: {phase}")
+            if effective_mode == "disabled" and (
+                status != "skipped" or loaded or executed or validated
+            ):
+                errors.append(f"Disabled Cognition phase claimed activity: {phase}")
+            if require_deliverable and changed:
+                errors.append(f"Deliverable trace contains changed disposition: {phase}")
+            if "candidate_ref" in record and phase != "MEMORY_REVIEW":
+                errors.append("Only MEMORY_REVIEW may reference a Memory Candidate")
+            if (
+                phase == "MEMORY_REVIEW"
+                and outcome == "candidate"
+                and status == "executed"
+                and "candidate_ref" not in record
+            ):
+                errors.append("Accepted Memory Candidate outcome has no candidate_ref")
+
+        if len(actual_phases) != len(set(actual_phases)):
+            errors.append("Trace contains duplicate Cognition phases")
+        if actual_phases != expected_phases[: len(actual_phases)]:
+            errors.append("Cognition phases are out of lifecycle order")
+        if require_deliverable and actual_phases != expected_phases:
+            errors.append("Deliverable trace must include all Cognition phases")
+
+    @staticmethod
+    def _validate_cognition_refs(
+        trace: Mapping[str, Any], run_root: Path, errors: list[str]
+    ) -> None:
+        records = trace.get("cognition")
+        if not isinstance(records, list):
+            return
+        memory_dir = (run_root / "memory").resolve()
+        for record in records:
+            if not isinstance(record, dict) or "candidate_ref" not in record:
+                continue
+            value = record["candidate_ref"]
+            if not isinstance(value, str) or Path(value).is_absolute():
+                errors.append("Memory Candidate reference must be a relative string")
+                continue
+            candidate = (run_root / value).resolve()
+            try:
+                candidate.relative_to(run_root)
+                candidate.relative_to(memory_dir)
+            except ValueError:
+                errors.append("Memory Candidate reference escapes the run memory directory")
+                continue
+            if not candidate.is_file():
+                errors.append("Memory Candidate reference is missing")
 
     @staticmethod
     def _validate_run_record(trace: Mapping[str, Any], errors: list[str]) -> None:

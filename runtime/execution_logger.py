@@ -10,6 +10,8 @@ from typing import Any, Mapping, Optional
 
 from .models import (
     AgentRuntimeError,
+    CognitionPhaseResult,
+    CognitionPolicy,
     ExecutionStep,
     ProofFlags,
     RunContext,
@@ -32,6 +34,8 @@ class ExecutionLogger:
         self.transitions: list[StateTransition] = []
         self.steps: list[ExecutionStep] = []
         self.artifacts: dict[str, str] = {}
+        self.cognition_policy: dict[str, str] | None = None
+        self.cognition: list[dict[str, Any]] = []
         self.proof = ProofFlags()
         self.errors: list[dict[str, str]] = []
         self.trace_path = context.trace_dir / "execution_trace.json"
@@ -86,6 +90,17 @@ class ExecutionLogger:
         self.artifacts = dict(artifacts)
         self.proof.artifacts_validated = True
 
+    def set_cognition_policy(self, policy: CognitionPolicy) -> None:
+        self.cognition_policy = policy.to_dict()
+
+    def record_cognition(
+        self,
+        result: CognitionPhaseResult,
+        *,
+        candidate_ref: Optional[str] = None,
+    ) -> None:
+        self.cognition.append(result.to_trace_dict(candidate_ref=candidate_ref))
+
     def set_proof(self, **flags: bool) -> None:
         for name, value in flags.items():
             if not hasattr(self.proof, name):
@@ -121,6 +136,8 @@ class ExecutionLogger:
             "version": self.skill_version,
             "input_refs": list(input_refs),
             "run_record": run_record.to_dict(),
+            "cognition_policy": self.cognition_policy,
+            "cognition": list(self.cognition),
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "transitions": [transition.to_dict() for transition in self.transitions],

@@ -1,0 +1,14 @@
+schema_version: "1.0"
+protocols:
+  expansion:
+    path: expansion_protocol.md
+    phases: [prepare]
+  decision:
+    path: decision_protocol.md
+    phases: [prepare]
+  critique:
+    path: critique_protocol.md
+    phases: [critique]
+  memory:
+    path: memory_protocol.md
+    phases: [memory_review]

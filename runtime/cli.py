@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .capabilities import CapabilitySet
+from .cognition_manager import CognitionManager
 from .models import AgentRuntimeError, InputRef
 from .project_loader import ProjectLoader
 from .registry_loader import RegistryLoader
@@ -84,8 +86,24 @@ def _validate_contracts(repository_root: Path) -> dict[str, object]:
     registry = RegistryLoader(repository_root)
     skill_loader = SkillLoader(registry)
     entries = registry.load()
+    cognition_manager = CognitionManager(
+        repository_root,
+        CapabilitySet({}),
+        provider_declared=False,
+    )
+    cognition_protocols = cognition_manager.validate_registry()
     for name in entries:
-        skill_loader.load_registered(name)
+        skill = skill_loader.load_registered(name)
+        cognition_manager.validate_selection(
+            phase="prepare", protocol_ids=skill.contract.cognition["prepare"]
+        )
+        cognition_manager.validate_selection(
+            phase="critique", protocol_ids=skill.contract.cognition["critique"]
+        )
+        cognition_manager.validate_selection(
+            phase="memory_review",
+            protocol_ids=(skill.contract.cognition["memory_review"],),
+        )
     project_loader = ProjectLoader(repository_root, registry_loader=registry)
     project_ids = project_loader.list_project_ids()
     for project_id in project_ids:
@@ -94,6 +112,7 @@ def _validate_contracts(repository_root: Path) -> dict[str, object]:
         "valid": True,
         "skills": list(entries),
         "projects": list(project_ids),
+        "cognition_protocols": list(cognition_protocols),
     }
 
 

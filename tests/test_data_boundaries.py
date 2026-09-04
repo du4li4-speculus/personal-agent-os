@@ -37,6 +37,7 @@ class DataBoundaryTestCase(unittest.TestCase):
         root = self.temp_root / "repository"
         shutil.copytree(FIXTURE_ROOT, root)
         shutil.copytree(REPOSITORY_ROOT / "contracts", root / "contracts")
+        shutil.copytree(REPOSITORY_ROOT / "cognition", root / "cognition")
         (root / "runtime").mkdir()
         shutil.copy2(
             REPOSITORY_ROOT / "runtime" / "state_machine.yaml",

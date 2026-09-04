@@ -140,6 +140,63 @@ class ProjectConfig:
 
 
 @dataclass(frozen=True)
+class CognitionPolicy:
+    skill_mode: str
+    project_mode: str
+    effective_mode: str
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "skill_mode": self.skill_mode,
+            "project_mode": self.project_mode,
+            "effective_mode": self.effective_mode,
+        }
+
+
+@dataclass(frozen=True)
+class CognitionProtocol:
+    protocol_id: str
+    phases: Tuple[str, ...]
+    content: str
+
+
+@dataclass(frozen=True)
+class CognitionPhaseResult:
+    phase: str
+    protocols: Tuple[str, ...]
+    effective_mode: str
+    loaded: bool
+    executed: bool
+    validated: bool
+    status: str
+    provider_outcome: Optional[str]
+    changed_run_disposition: bool
+    reason: Optional[str] = None
+    proposal_fields: Tuple[str, ...] = ()
+    candidate_payload: Optional[Mapping[str, Any]] = None
+    error_code: Optional[str] = None
+
+    def to_trace_dict(self, *, candidate_ref: Optional[str] = None) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "phase": self.phase,
+            "protocols": list(self.protocols),
+            "effective_mode": self.effective_mode,
+            "loaded": self.loaded,
+            "executed": self.executed,
+            "validated": self.validated,
+            "status": self.status,
+            "provider_outcome": self.provider_outcome,
+            "changed_run_disposition": self.changed_run_disposition,
+            "proposal_fields": list(self.proposal_fields),
+        }
+        if self.reason is not None:
+            result["reason"] = self.reason
+        if candidate_ref is not None:
+            result["candidate_ref"] = candidate_ref
+        return result
+
+
+@dataclass(frozen=True)
 class RunRecord:
     schema_version: str
     run_id: str

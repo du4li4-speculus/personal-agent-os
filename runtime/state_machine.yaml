@@ -23,13 +23,18 @@ states:
 
   RUNTIME_CHECK:
     next:
-      - EXECUTE
+      - COGNITION_PREPARE
       - RECOVERY
       - FAILED
 
   RECOVERY:
     next:
       - RUNTIME_CHECK
+      - FAILED
+
+  COGNITION_PREPARE:
+    next:
+      - EXECUTE
       - FAILED
 
   EXECUTE:
@@ -42,10 +47,20 @@ states:
   ARTIFACT:
     gate: artifact_validation
     next:
+      - COGNITION_CRITIQUE
+      - FAILED
+
+  COGNITION_CRITIQUE:
+    next:
       - VALIDATE
       - FAILED
 
   VALIDATE:
+    next:
+      - MEMORY_REVIEW
+      - FAILED
+
+  MEMORY_REVIEW:
     next:
       - DELIVER
       - FAILED

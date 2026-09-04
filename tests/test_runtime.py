@@ -38,6 +38,7 @@ def write_active_sample_repository(
 ) -> None:
     shutil.copytree(FIXTURE_ROOT, root)
     shutil.copytree(REPOSITORY_ROOT / "contracts", root / "contracts")
+    shutil.copytree(REPOSITORY_ROOT / "cognition", root / "cognition")
     runtime_dir = root / "runtime"
     runtime_dir.mkdir(parents=True)
     shutil.copy2(
@@ -142,9 +143,12 @@ class RuntimeTestCase(unittest.TestCase):
             "FIND_SKILL",
             "LOAD_SKILL",
             "RUNTIME_CHECK",
+            "COGNITION_PREPARE",
             "EXECUTE",
             "ARTIFACT",
+            "COGNITION_CRITIQUE",
             "VALIDATE",
+            "MEMORY_REVIEW",
             "DELIVER",
         ]
         for state in path:
@@ -195,9 +199,12 @@ class RuntimeTestCase(unittest.TestCase):
                 "FIND_SKILL",
                 "LOAD_SKILL",
                 "RUNTIME_CHECK",
+                "COGNITION_PREPARE",
                 "EXECUTE",
                 "ARTIFACT",
+                "COGNITION_CRITIQUE",
                 "VALIDATE",
+                "MEMORY_REVIEW",
                 "DELIVER",
             ],
         )

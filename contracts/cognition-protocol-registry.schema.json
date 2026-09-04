@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/cognition-protocol-registry.schema.json",
+  "title": "Agent OS Cognition Protocol Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocols"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "protocols": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "additionalProperties": {"$ref": "#/$defs/protocol"}
+    }
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "phases"],
+      "properties": {
+        "path": {
+          "allOf": [
+            {"$ref": "#/$defs/relative_path"},
+            {"pattern": "\\.md$"}
+          ]
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["prepare", "critique", "memory_review"]}
+        }
+      }
+    }
+  }
+}

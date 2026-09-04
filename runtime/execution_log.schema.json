@@ -11,6 +11,8 @@
     "version",
     "input_refs",
     "run_record",
+    "cognition_policy",
+    "cognition",
     "started_at",
     "finished_at",
     "transitions",
@@ -70,6 +72,20 @@
         },
         "trace_ref": {"const": "trace/execution_trace.json"}
       }
+    },
+    "cognition_policy": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["skill_mode", "project_mode", "effective_mode"],
+      "properties": {
+        "skill_mode": {"enum": ["disabled", "optional", "required"]},
+        "project_mode": {"enum": ["disabled", "optional", "required"]},
+        "effective_mode": {"enum": ["disabled", "optional", "required"]}
+      }
+    },
+    "cognition": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/cognition_record"}
     },
     "started_at": {"$ref": "#/$defs/nonblank"},
     "finished_at": {"type": ["string", "null"]},
@@ -155,6 +171,55 @@
         {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
         {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
       ]
+    },
+    "cognition_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "protocols",
+        "effective_mode",
+        "loaded",
+        "executed",
+        "validated",
+        "status",
+        "provider_outcome",
+        "changed_run_disposition",
+        "proposal_fields"
+      ],
+      "properties": {
+        "phase": {
+          "enum": ["COGNITION_PREPARE", "COGNITION_CRITIQUE", "MEMORY_REVIEW"]
+        },
+        "protocols": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        },
+        "effective_mode": {"enum": ["disabled", "optional", "required"]},
+        "loaded": {"type": "boolean"},
+        "executed": {"type": "boolean"},
+        "validated": {"type": "boolean"},
+        "status": {
+          "enum": ["skipped", "executed", "blocked", "review_required"]
+        },
+        "provider_outcome": {"type": ["string", "null"]},
+        "changed_run_disposition": {"type": "boolean"},
+        "proposal_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["framing", "expansion", "criteria", "decision_support"]
+          }
+        },
+        "reason": {"$ref": "#/$defs/nonblank"},
+        "candidate_ref": {
+          "allOf": [
+            {"$ref": "#/$defs/relative_path"},
+            {"const": "memory/memory_candidate.json"}
+          ]
+        }
+      }
     }
   }
 }

@@ -1,8 +1,6 @@
 # Agent OS Workflow Contract
 
-This document is the human-readable companion to `runtime/state_machine.yaml`. The Runtime is responsible for enforcing this lifecycle and for producing an execution trace for every attempted run.
-
-The canonical Runtime ownership contract is `docs/policies/RUNTIME_POLICY.md`. Memory Candidate and promotion boundaries are canonical in `docs/policies/MEMORY_POLICY.md`. This document describes currently executable behavior; it does not claim that planned Cognition hooks or Registry entrypoints already execute.
+This document is the human-readable companion to `runtime/state_machine.yaml`. Runtime owns lifecycle enforcement and truthful execution traces; it does not own Skill semantics, Cognition protocol content, Project decisions, or persistent Memory.
 
 ## Lifecycle
 
@@ -12,83 +10,96 @@ CREATED
   -> FIND_SKILL
   -> LOAD_SKILL
   -> RUNTIME_CHECK
+  -> COGNITION_PREPARE
   -> EXECUTE
   -> ARTIFACT
+  -> COGNITION_CRITIQUE
   -> VALIDATE
+  -> MEMORY_REVIEW
   -> DELIVER
 ```
 
-Any non-terminal state may fail closed to `FAILED`. A recoverable runtime-readiness error may follow this path once:
+Any non-terminal state may fail closed to `FAILED`. A recoverable Runtime-readiness failure may use the existing one-retry path:
 
 ```text
 RUNTIME_CHECK -> RECOVERY -> RUNTIME_CHECK
 ```
 
-If the retry fails, the run ends at `FAILED`. `DELIVER` and `FAILED` are terminal states.
+Cognition never triggers recovery, automatic self-repair, or Skill re-execution. `DELIVER` and `FAILED` are terminal.
 
 ## State responsibilities and gates
 
 | State | Responsibility | Success gate |
 | --- | --- | --- |
-| `CREATED` | Create a run context and run id. | Context exists. |
-| `IDENTIFY_TASK` | Record the requested task and optional source input. | Task is non-empty. |
-| `FIND_SKILL` | Resolve the requested registry key. | Skill is registered, active, and inside `skills/`. |
-| `LOAD_SKILL` | Load `SKILL.md` and `manifest.yaml`. | Name, type, version, outputs, and requirements are valid. |
-| `RUNTIME_CHECK` | Check runtime capabilities, input, and output directory. | Required capabilities are available and output is writable. |
-| `EXECUTE` | Invoke the caller-provided Skill adapter. | Adapter returns an artifact mapping without an exception. |
-| `ARTIFACT` | Check adapter output against the manifest. | Every declared output exists, is non-empty, and stays in the output directory. |
-| `VALIDATE` | Validate trace structure, proof, and artifact references. | Validation result is valid. |
-| `DELIVER` | Mark the run deliverable. | All proof flags are true and the final trace is persisted. |
-| `RECOVERY` | Record one recoverable retry. | Retry is available and returns to `RUNTIME_CHECK`. |
-| `FAILED` | Record a non-deliverable terminal result. | Failure trace is persisted when the filesystem permits. |
+| `CREATED` | Create the isolated run context and run id. | `runs/<project-id>/<run-id>/` exists. |
+| `IDENTIFY_TASK` | Record the task and staged input count. | Task is non-empty. |
+| `FIND_SKILL` | Resolve the Project-allowed Registry key. | Skill is registered, active, and contained by `skills/`. |
+| `LOAD_SKILL` | Validate the Skill manifest and load its declared entrypoint. | Registry/manifest identity, version, contract, and entrypoint agree. |
+| `RUNTIME_CHECK` | Verify run paths, staged inputs, and non-Cognition required capabilities. | Paths remain under the run and required infrastructure is available. |
+| `COGNITION_PREPARE` | Load selected prepare protocols and optionally request bounded reasoning proposals. | Optional absence is recorded as skipped; required absence fails before Skill execution. |
+| `EXECUTE` | Invoke only the Skill-local registered entrypoint. | Entrypoint returns a `SkillExecutionResult`. |
+| `ARTIFACT` | Validate declared intermediate and final artifacts. | Every returned path is exact, non-empty, and contained in `work/` or `artifacts/`. |
+| `COGNITION_CRITIQUE` | Request a bounded `pass`, `blocked`, or `review_required` disposition. | `pass` continues; the other outcomes fail closed without re-execution. |
+| `VALIDATE` | Validate generic execution proof and run-scoped references. | Trace and artifacts satisfy their contracts. |
+| `MEMORY_REVIEW` | Optionally propose reusable learning after validation. | No candidate, or one schema-valid run-local proposed Memory Candidate. |
+| `DELIVER` | Persist the successful final trace. | Validation completed and no Cognition phase changed run disposition. |
+| `RECOVERY` | Record one recoverable Runtime-readiness retry. | Retry returns to `RUNTIME_CHECK`. |
+| `FAILED` | Record a non-deliverable result. | Failure trace is persisted when the run filesystem permits. |
 
-## Execution proof
+## Effective Cognition policy
 
-The Runtime writes `<output-dir>/execution_trace.json`. A successful trace must show:
+Skill policy defines whether Cognition is supported or required; Project policy may select stricter execution without redefining Skill semantics.
 
-- a unique run id, task, Skill name, version, timestamps, and final status;
-- ordered transitions beginning at `CREATED` and ending at `DELIVER`;
-- execution steps and stable error details when relevant;
-- the exact artifact paths validated by the artifact gate;
-- these proof flags all set to `true`: `skill_loaded`, `runtime_checked`, `execution_traced`, `artifacts_validated`, and `validation_completed`.
+- Skill `required` always produces effective `required`, including when Project says `disabled`.
+- Project `required` escalates Skill `optional` to effective `required`.
+- Project `disabled` disables Skill `optional` Cognition.
+- Skill `disabled` remains disabled for optional or disabled Projects.
+- Project `required` combined with Skill `disabled` is a policy conflict and fails before domain execution.
 
-Loading a `SKILL.md` is source context only. It is never execution proof.
+Missing `cognition.execute` is recorded at `COGNITION_PREPARE`. It fails with `COGNITION_PROVIDER_MISSING` only when effective mode is required; optional mode records an explicit skip. Disabled mode records selected protocol ids without loading or executing them.
 
-## Adapter boundary
+## Cognition proof
 
-Library callers provide an adapter with this shape:
+Each phase trace records:
 
-```python
-def execute(context: RunContext, skill: LoadedSkill) -> Mapping[str, str | Path]:
-    ...
-```
+- selected protocol ids and effective policy;
+- whether protocol content was loaded;
+- whether a provider actually executed;
+- whether the provider response was validated;
+- provider outcome and phase status;
+- whether that outcome changed run disposition;
+- a run-local candidate reference when Memory review creates one.
 
-The returned mapping must contain exactly the output names declared in the Skill manifest. Paths are relative to the run output directory. Domain-specific assessment and PDF/content validation remain inside the Skill adapter or a future Skill validator.
+Loading Markdown is not provider execution and cannot set `executed=true` or `validated=true`. Runtime sends the provider only the protocol content and minimum phase context. It contains no model prompts, vendor behavior, or domain rules.
 
-The caller-provided adapter is current pre-v0.3+ behavior. ADR-0003 requires its replacement by a Registry-resolved Skill entrypoint at Task 5; until that commit lands, Registry discovery and execution remain separate operations.
+Prepare responses may contain only advisory framing, expansion, criteria, or decision-support proposals; Runtime does not apply those proposals to immutable contracts or Skill outputs. Critique responses are limited to `pass`, `blocked`, and `review_required`. Memory review may return `no_candidate` or one complete candidate proposal for validation by `MemoryManager`.
 
-## Version and failure policy
+## Run and Memory boundaries
 
-Registry and manifest versions must match exactly. The Runtime does not silently select a version or downgrade a contract. Any mismatch, missing contract, illegal transition, adapter failure, missing artifact, or invalid proof ends in `FAILED`.
+External inputs are copied to `input/` before execution. Skills receive run-scoped `work/` and `artifacts/` paths, traces are written to `trace/`, and an optional Memory Candidate is written to `memory/memory_candidate.json` only after validation.
+
+Runtime exposes no persistent promotion API and cannot write `memory/global/`, `memory/projects/`, or `memory/skills/`. Persistent promotion remains a separate reviewed operation.
 
 ## Operational commands
 
-From the repository root, after installing `requirements.txt`:
+From the repository root:
 
 ```bash
-python3 -m unittest discover -s tests -v
-python3 -m runtime.cli run-demo \
-  --skill toefl-writing-grader \
-  --output-dir /tmp/personal-agent-os-runtime-demo
+python3 -m runtime.cli list-skills
+python3 -m runtime.cli validate-contracts
+python3 -m runtime.cli run \
+  --project <project-id> \
+  --skill <active-skill> \
+  --input <role>=<path>
 python3 -m runtime.cli validate-trace \
-  --trace /tmp/personal-agent-os-runtime-demo/execution_trace.json
+  --trace runs/<project-id>/<run-id>/trace/execution_trace.json
 ```
 
-`run-demo` creates labeled fixture artifacts. They are smoke-test outputs and must not be presented as a real TOEFL assessment.
+`toefl-writing-grader` remains in `development`; Cognition integration does not activate or complete that domain workflow.
 
 ## Governance references
 
 - Runtime policy: `docs/policies/RUNTIME_POLICY.md`
 - Memory policy: `docs/policies/MEMORY_POLICY.md`
 - Project boundary: `docs/policies/PROJECT_BOUNDARY_POLICY.md`
-- Accepted lifecycle decisions: `docs/adr/README.md`
+- Accepted Cognition decision: `docs/adr/0005-integrate-cognition-lifecycle.md`

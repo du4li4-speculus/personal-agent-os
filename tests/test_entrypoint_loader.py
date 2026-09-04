@@ -30,6 +30,7 @@ class EntrypointLoaderTestCase(unittest.TestCase):
         root = Path(self.temp_dir.name) / f"repository-{self._fixture_counter}"
         shutil.copytree(FIXTURE_ROOT, root)
         shutil.copytree(REPOSITORY_ROOT / "contracts", root / "contracts")
+        shutil.copytree(REPOSITORY_ROOT / "cognition", root / "cognition")
         (root / "runtime").mkdir()
         shutil.copy2(
             REPOSITORY_ROOT / "runtime" / "state_machine.yaml",

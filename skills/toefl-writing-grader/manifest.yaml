@@ -30,7 +30,7 @@ outputs:
     path: artifacts/teacher_dashboard.json
 capabilities:
   required: [runtime.execution_proof, runtime.schema_validation]
-  optional: [document.extract_text, image.transcribe, pages.snappy]
+  optional: [document.extract_text, image.transcribe, pages.snappy, cognition.execute]
 cognition:
   mode: optional
   prepare: [expansion, decision]

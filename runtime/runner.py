@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
 from .artifact_manager import ArtifactManager
 from .capabilities import CapabilitySet
+from .cognition_manager import COGNITION_CAPABILITY, CognitionManager
 from .entrypoint_loader import EntrypointLoader
 from .execution_logger import ExecutionLogger
 from .models import (
     AgentRuntimeError,
     CapabilityProvider,
+    CognitionPhaseResult,
     ExecutionError,
     InputRef,
     LoadedSkill,
@@ -22,6 +25,7 @@ from .models import (
     RuntimeReadinessError,
     SkillExecutionResult,
 )
+from .memory_manager import MemoryManager
 from .project_loader import ProjectLoader
 from .registry_loader import RegistryLoader
 from .run_store import RunStore
@@ -114,6 +118,20 @@ class AgentRuntime:
             entrypoint = self.entrypoint_loader.load(skill)
             logger.set_skill_version(skill.version)
             logger.set_proof(skill_loaded=True)
+            cognition_policy = CognitionManager.resolve_policy(
+                skill_mode=skill.contract.cognition["mode"],
+                project_mode=project.cognition_mode,
+            )
+            logger.set_cognition_policy(cognition_policy)
+            cognition_manager = CognitionManager(
+                self.repository_root,
+                capability_set,
+                provider_declared=COGNITION_CAPABILITY
+                in (
+                    *skill.contract.required_capabilities,
+                    *skill.contract.optional_capabilities,
+                ),
+            )
             logger.record_step(
                 "LOAD_SKILL",
                 "success",
@@ -127,6 +145,17 @@ class AgentRuntime:
             self._runtime_check_with_recovery(
                 context, skill, capability_set, state_manager, logger
             )
+
+            self._move(
+                state_manager, logger, "COGNITION_PREPARE", "cognition_prepare"
+            )
+            prepare_result = cognition_manager.run_phase(
+                phase="prepare",
+                protocol_ids=tuple(skill.contract.cognition["prepare"]),
+                policy=cognition_policy,
+                context=self._prepare_cognition_context(context),
+            )
+            self._record_cognition_result(logger, prepare_result)
 
             self._move(state_manager, logger, "EXECUTE", "skill_entrypoint_execution")
             try:
@@ -179,6 +208,17 @@ class AgentRuntime:
                 },
             )
 
+            self._move(
+                state_manager, logger, "COGNITION_CRITIQUE", "cognition_critique"
+            )
+            critique_result = cognition_manager.run_phase(
+                phase="critique",
+                protocol_ids=tuple(skill.contract.cognition["critique"]),
+                policy=cognition_policy,
+                context=self._critique_cognition_context(context, artifacts),
+            )
+            self._record_cognition_result(logger, critique_result)
+
             self._move(state_manager, logger, "VALIDATE", "validation_gate")
             logger.record_step("VALIDATE", "started")
             logger.persist()
@@ -195,6 +235,48 @@ class AgentRuntime:
                 )
             logger.set_proof(validation_completed=True)
             logger.record_step("VALIDATE", "success")
+
+            self._move(state_manager, logger, "MEMORY_REVIEW", "memory_review")
+            memory_result = cognition_manager.run_phase(
+                phase="memory_review",
+                protocol_ids=(skill.contract.cognition["memory_review"],),
+                policy=cognition_policy,
+                context=self._memory_cognition_context(context, artifacts),
+            )
+            candidate_ref: str | None = None
+            if memory_result.candidate_payload is not None:
+                try:
+                    candidate_path = MemoryManager(self.repository_root).write_candidate(
+                        context.run_paths, memory_result.candidate_payload
+                    )
+                except AgentRuntimeError as exc:
+                    memory_result = replace(
+                        memory_result,
+                        validated=False,
+                        status="blocked",
+                        changed_run_disposition=True,
+                        reason="memory_candidate_invalid",
+                        error_code=exc.code,
+                    )
+                else:
+                    candidate_ref = candidate_path.relative_to(
+                        context.run_root
+                    ).as_posix()
+            self._record_cognition_result(
+                logger, memory_result, candidate_ref=candidate_ref
+            )
+            logger.persist()
+            final_validation = self.validator.validate_trace(
+                logger.as_dict(),
+                run_root=context.run_root,
+                require_deliverable=False,
+            )
+            if not final_validation.valid:
+                raise AgentRuntimeError(
+                    "Execution trace validation failed after Memory review: "
+                    + "; ".join(final_validation.errors),
+                    code="TRACE_VALIDATION_FAILED",
+                )
 
             self._move(state_manager, logger, "DELIVER", "delivery_ready")
             logger.finish(status="SUCCEEDED", final_state="DELIVER")
@@ -229,6 +311,78 @@ class AgentRuntime:
         previous = state_manager.current_state
         state_manager.transition(target)
         logger.record_transition(previous, target, reason=reason)
+
+    @staticmethod
+    def _record_cognition_result(
+        logger: ExecutionLogger,
+        result: CognitionPhaseResult,
+        *,
+        candidate_ref: str | None = None,
+    ) -> None:
+        logger.record_cognition(result, candidate_ref=candidate_ref)
+        details = {
+            "protocols": list(result.protocols),
+            "effective_mode": result.effective_mode,
+            "loaded": result.loaded,
+            "executed": result.executed,
+            "validated": result.validated,
+            "provider_outcome": result.provider_outcome,
+            "changed_run_disposition": result.changed_run_disposition,
+        }
+        if candidate_ref is not None:
+            details["candidate_ref"] = candidate_ref
+        logger.record_step(
+            result.phase,
+            "failed" if result.error_code else result.status,
+            details=details,
+            error_code=result.error_code,
+            error_message=result.reason if result.error_code else None,
+        )
+        if result.error_code is not None:
+            raise AgentRuntimeError(
+                result.reason or "Cognition phase changed the run disposition",
+                code=result.error_code,
+            )
+
+    @staticmethod
+    def _prepare_cognition_context(context: RunContext) -> dict[str, object]:
+        return {
+            "run_id": context.run_id,
+            "project_id": context.project_id,
+            "skill_name": context.skill_name,
+            "task": context.task,
+            "input_refs": [
+                {
+                    "ref": input_ref.path.relative_to(context.run_root).as_posix(),
+                    "role": input_ref.role,
+                    "media_type": input_ref.media_type,
+                }
+                for input_ref in context.inputs
+            ],
+        }
+
+    @staticmethod
+    def _critique_cognition_context(
+        context: RunContext, artifacts: Mapping[str, str]
+    ) -> dict[str, object]:
+        return {
+            "run_id": context.run_id,
+            "project_id": context.project_id,
+            "skill_name": context.skill_name,
+            "artifact_refs": sorted(artifacts.values()),
+        }
+
+    @staticmethod
+    def _memory_cognition_context(
+        context: RunContext, artifacts: Mapping[str, str]
+    ) -> dict[str, object]:
+        return {
+            "run_id": context.run_id,
+            "project_id": context.project_id,
+            "skill_name": context.skill_name,
+            "artifact_refs": sorted(artifacts.values()),
+            "validation_completed": True,
+        }
 
     @staticmethod
     def _runtime_check(
@@ -287,7 +441,8 @@ class AgentRuntime:
         missing_capabilities = sorted(
             capability_id
             for capability_id in skill.contract.required_capabilities
-            if not capabilities.has(capability_id)
+            if capability_id != COGNITION_CAPABILITY
+            and not capabilities.has(capability_id)
         )
         if missing_capabilities:
             raise AgentRuntimeError(

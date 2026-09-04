@@ -23,6 +23,15 @@ For non-trivial tasks:
 
 Cognition protocols guide thinking processes but do not replace domain Skills or Runtime execution.
 
+## Cognition execution boundary
+
+- Selecting or loading a Markdown protocol records context availability only; neither event is proof that Cognition executed.
+- Cognition executes only through the typed `cognition.execute` capability and its provider result must pass Runtime validation.
+- Prepare-phase results are advisory framing, expansion, criteria, or decision-support proposals. They cannot mutate Project configuration, Skill contracts, Registry truth, Core rules, or domain artifacts.
+- Critique may pass, block delivery, or require explicit review. It does not trigger automatic repair or re-execution.
+- Memory review occurs only after validation and may create only a run-local proposed Memory Candidate.
+- Cognition remains domain-neutral and never owns scores, diagnoses, reports, or Skill outputs.
+
 ## Layer usage
 
 - Use Cognition for reusable reasoning, exploration, critique, and decision support.
