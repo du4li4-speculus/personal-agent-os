@@ -18,6 +18,22 @@ Not responsible for:
 - project execution details
 
 
+### Cognition Layer
+
+The cognition layer defines reusable reasoning protocols for Agent OS.
+
+Responsible for:
+- exploration and expansion of problem spaces
+- critique and assumption testing
+- decision support
+- transforming experience into reusable memory
+
+Not responsible for:
+- domain expertise
+- execution logic
+- project-specific rules
+
+
 ### Project Layer
 Examples:
 - TOEFL-Agent-OS
