@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/schemas/toefl/validation_record.schema.json",
+  "title": "TOEFL Writing validation record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["validation_id", "assessment_id", "checks", "status"],
+  "properties": {
+    "validation_id": {"type": "string", "minLength": 1},
+    "assessment_id": {"type": "string", "minLength": 1},
+    "checks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/check"}},
+    "overrides_reviewed": {"type": "boolean"},
+    "status": {"enum": ["pass", "fail", "blocked"]},
+    "blocking_reasons": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "status", "evidence"],
+      "properties": {
+        "check_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["pass", "fail", "not_run"]},
+        "evidence": {"type": "string", "minLength": 1},
+        "details": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

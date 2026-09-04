@@ -5,3 +5,4 @@ input:
 expected:
   preserve_override: true
   update_rule_automatically: false
+  teacher_override_schema_rule: not_automatic

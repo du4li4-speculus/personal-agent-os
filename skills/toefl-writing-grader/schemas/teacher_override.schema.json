@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/schemas/toefl/teacher_override.schema.json",
+  "title": "TOEFL Writing teacher override",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["override_id", "diagnosis_id", "teacher_id", "ai_diagnosis", "teacher_override", "reason", "rule_update"],
+  "properties": {
+    "override_id": {"type": "string", "minLength": 1},
+    "diagnosis_id": {"type": "string", "minLength": 1},
+    "teacher_id": {"type": "string", "minLength": 1},
+    "ai_diagnosis": {"type": "string", "minLength": 1},
+    "teacher_override": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "evidence_ids": {"type": "array", "items": {"type": "string"}},
+    "rule_update": {"const": "not_automatic"},
+    "review_status": {"enum": ["recorded", "validated", "rejected"]}
+  }
+}
