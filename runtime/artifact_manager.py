@@ -11,8 +11,16 @@ from .models import ArtifactValidationError
 class ArtifactManager:
     """Enforce exact, in-directory, non-empty manifest outputs."""
 
-    def __init__(self, output_dir: Path) -> None:
+    def __init__(self, output_dir: Path, *, run_root: Path | None = None) -> None:
         self.output_dir = output_dir.resolve()
+        self.run_root = Path(run_root).resolve() if run_root else self.output_dir
+        try:
+            self.output_dir.relative_to(self.run_root)
+        except ValueError as exc:
+            raise ArtifactValidationError(
+                f"Artifact directory escapes run root: {self.output_dir}",
+                code="ARTIFACT_DIRECTORY_ESCAPE",
+            ) from exc
 
     def validate(
         self,
@@ -50,7 +58,8 @@ class ArtifactManager:
                 )
             resolved = (self.output_dir / raw_path).resolve()
             try:
-                relative = resolved.relative_to(self.output_dir)
+                resolved.relative_to(self.output_dir)
+                relative = resolved.relative_to(self.run_root)
             except ValueError as exc:
                 raise ArtifactValidationError(
                     f"Artifact path escapes output directory: {name}",
@@ -74,15 +83,19 @@ class ArtifactManager:
 
         errors: list[str] = []
         for name, value in artifacts.items():
+            if not isinstance(value, str):
+                errors.append(f"{name}: artifact path is not a string")
+                continue
             candidate = Path(value)
             if candidate.is_absolute():
                 errors.append(f"{name}: artifact path is absolute")
                 continue
-            resolved = (self.output_dir / candidate).resolve()
+            resolved = (self.run_root / candidate).resolve()
             try:
+                resolved.relative_to(self.run_root)
                 resolved.relative_to(self.output_dir)
             except ValueError:
-                errors.append(f"{name}: artifact path escapes output directory")
+                errors.append(f"{name}: artifact path escapes artifact directory")
                 continue
             if not resolved.is_file():
                 errors.append(f"{name}: artifact file is missing")

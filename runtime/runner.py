@@ -1,10 +1,11 @@
-"""Orchestrate the Agent OS state machine and execution-proof gates."""
+"""Orchestrate registered Skills inside isolated Project run boundaries."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from .artifact_manager import ArtifactManager
 from .capabilities import CapabilitySet
@@ -21,18 +22,23 @@ from .models import (
     RuntimeReadinessError,
     SkillExecutionResult,
 )
+from .project_loader import ProjectLoader
 from .registry_loader import RegistryLoader
+from .run_store import RunStore
 from .skill_loader import SkillLoader
 from .state_manager import StateManager
 from .validator_engine import ValidatorEngine
 
 
 class AgentRuntime:
-    """Run a registered Skill through the configured execution lifecycle."""
+    """Run one Project-authorized, registered Skill in a fresh run directory."""
 
     def __init__(self, repository_root: Path) -> None:
         self.repository_root = repository_root.resolve()
         self.registry_loader = RegistryLoader(self.repository_root)
+        self.project_loader = ProjectLoader(
+            self.repository_root, registry_loader=self.registry_loader
+        )
         self.skill_loader = SkillLoader(self.registry_loader)
         self.entrypoint_loader = EntrypointLoader()
         self.state_machine_path = self.repository_root / "runtime" / "state_machine.yaml"
@@ -48,13 +54,34 @@ class AgentRuntime:
         run_root: Path,
         capabilities: Mapping[str, CapabilityProvider],
     ) -> RunResult:
+        run_id = uuid4().hex
+        try:
+            project = self.project_loader.load(project_id)
+            if skill_name not in project.allowed_skills:
+                raise AgentRuntimeError(
+                    f"Skill is not allowed by Project {project_id}: {skill_name}",
+                    code="PROJECT_SKILL_NOT_ALLOWED",
+                )
+            run_store = RunStore(Path(run_root))
+            run_paths = run_store.create(project_id, run_id)
+            staged_inputs = run_store.stage_inputs(run_paths, inputs)
+        except AgentRuntimeError as exc:
+            return RunResult(
+                run_id=run_id,
+                status="FAILED",
+                final_state="FAILED",
+                trace_path=None,
+                validation_errors=(f"{exc.code}: {exc.message}",),
+            )
+
         context = RunContext.create(
+            run_id=run_id,
             task=task,
             skill_name=skill_name,
             project_id=project_id,
             repository_root=self.repository_root,
-            output_dir=Path(run_root),
-            inputs=tuple(inputs),
+            run_paths=run_paths,
+            inputs=staged_inputs,
         )
         capability_set = CapabilitySet(capabilities)
         state_manager = StateManager.from_file(self.state_machine_path)
@@ -64,7 +91,6 @@ class AgentRuntime:
         try:
             self._move(state_manager, logger, "IDENTIFY_TASK", "task_identified")
             self._require_task(context.task)
-            self._require_project_id(context.project_id)
             logger.record_step(
                 "IDENTIFY_TASK",
                 "success",
@@ -134,12 +160,23 @@ class AgentRuntime:
             )
 
             self._move(state_manager, logger, "ARTIFACT", "artifact_gate")
-            artifacts = ArtifactManager(context.output_dir).validate(
-                skill.outputs, execution_result.artifacts
+            intermediate_artifacts = ArtifactManager(
+                context.work_dir, run_root=context.run_root
+            ).validate(
+                tuple(spec.path for spec in skill.contract.intermediate_outputs),
+                execution_result.intermediate_artifacts,
             )
+            artifacts = ArtifactManager(
+                context.artifact_dir, run_root=context.run_root
+            ).validate(skill.outputs, execution_result.artifacts)
             logger.set_artifacts(artifacts)
             logger.record_step(
-                "ARTIFACT", "success", details={"artifacts": artifacts}
+                "ARTIFACT",
+                "success",
+                details={
+                    "intermediate_artifacts": intermediate_artifacts,
+                    "artifacts": artifacts,
+                },
             )
 
             self._move(state_manager, logger, "VALIDATE", "validation_gate")
@@ -147,7 +184,7 @@ class AgentRuntime:
             logger.persist()
             validation = self.validator.validate_trace(
                 logger.as_dict(),
-                output_dir=context.output_dir,
+                run_root=context.run_root,
                 require_deliverable=False,
             )
             if not validation.valid:
@@ -183,13 +220,6 @@ class AgentRuntime:
             )
 
     @staticmethod
-    def _require_project_id(project_id: str) -> None:
-        if not isinstance(project_id, str) or not project_id.strip():
-            raise AgentRuntimeError(
-                "Project id must be a non-empty string", code="PROJECT_ID_INVALID"
-            )
-
-    @staticmethod
     def _move(
         state_manager: StateManager,
         logger: ExecutionLogger,
@@ -206,27 +236,52 @@ class AgentRuntime:
         skill: LoadedSkill,
         capabilities: CapabilitySet,
     ) -> None:
-        output_dir = context.output_dir
-        if output_dir.exists() and not output_dir.is_dir():
-            raise RuntimeReadinessError(
-                f"Output path is not a directory: {output_dir}",
-                code="OUTPUT_DIRECTORY_INVALID",
-            )
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-            probe = output_dir / ".runtime-write-probe"
-            probe.write_text("runtime probe\n", encoding="utf-8")
-            probe.unlink()
-        except OSError as exc:
-            raise RuntimeReadinessError(
-                f"Output directory is not writable: {output_dir}",
-                code="OUTPUT_DIRECTORY_NOT_WRITABLE",
-            ) from exc
+        root = context.run_root.resolve()
+        directories = (
+            context.input_dir,
+            context.work_dir,
+            context.artifact_dir,
+            context.trace_dir,
+            context.memory_dir,
+        )
+        for directory in directories:
+            resolved = directory.resolve()
+            try:
+                resolved.relative_to(root)
+            except ValueError as exc:
+                raise RuntimeReadinessError(
+                    f"Run directory escapes current run: {directory}",
+                    code="RUN_PATH_ESCAPE",
+                    recoverable=False,
+                ) from exc
+            if not resolved.is_dir():
+                raise RuntimeReadinessError(
+                    f"Run path is not a directory: {directory}",
+                    code="RUN_DIRECTORY_INVALID",
+                    recoverable=False,
+                )
+            try:
+                probe = resolved / ".runtime-write-probe"
+                probe.write_text("runtime probe\n", encoding="utf-8")
+                probe.unlink()
+            except OSError as exc:
+                raise RuntimeReadinessError(
+                    f"Run directory is not writable: {directory}",
+                    code="RUN_DIRECTORY_NOT_WRITABLE",
+                ) from exc
 
         for input_ref in context.inputs:
-            if not input_ref.path.is_file():
+            resolved_input = input_ref.path.resolve()
+            try:
+                resolved_input.relative_to(context.input_dir.resolve())
+            except ValueError as exc:
                 raise AgentRuntimeError(
-                    f"Input path does not exist: {input_ref.path}",
+                    "Skill input is outside the staged input boundary",
+                    code="INPUT_PATH_ESCAPE",
+                ) from exc
+            if not resolved_input.is_file():
+                raise AgentRuntimeError(
+                    f"Staged input path does not exist: {resolved_input}",
                     code="INPUT_NOT_FOUND",
                 )
         missing_capabilities = sorted(
@@ -262,7 +317,7 @@ class AgentRuntime:
                     error_code=exc.code,
                     error_message=exc.message,
                 )
-                if not state_manager.can_recover():
+                if not exc.recoverable or not state_manager.can_recover():
                     raise
                 self._move(state_manager, logger, "RECOVERY", "runtime_retry")
                 logger.record_step(
@@ -301,7 +356,7 @@ class AgentRuntime:
         trace_path: Optional[Path]
         try:
             trace_path = logger.persist()
-        except OSError:
+        except (OSError, AgentRuntimeError):
             trace_path = None
         return RunResult(
             run_id=context.run_id,

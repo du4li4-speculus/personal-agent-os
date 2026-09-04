@@ -44,6 +44,16 @@ def write_active_sample_repository(
         REPOSITORY_ROOT / "runtime" / "state_machine.yaml",
         runtime_dir / "state_machine.yaml",
     )
+    project_dir = root / "projects" / "test"
+    project_dir.mkdir(parents=True)
+    (project_dir / "project.yaml").write_text(
+        'schema_version: "1.0"\n'
+        "project_id: test\n"
+        "allowed_skills: [sample]\n"
+        "cognition_mode: optional\n"
+        "memory_policy: candidate_only\n",
+        encoding="utf-8",
+    )
     registry_path = root / "registry" / "skill_registry.yaml"
     registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
     registry["skills"][SAMPLE_SKILL]["version"] = registry_version
@@ -259,8 +269,9 @@ class RuntimeTestCase(unittest.TestCase):
         result = self._run(task="Proof validation test")
         trace = json.loads(result.trace_path.read_text(encoding="utf-8"))
         trace["proof"]["execution_traced"] = False
+        run_instance = result.trace_path.parent.parent
         validation = ValidatorEngine().validate_trace(
-            trace, output_dir=self.output_dir
+            trace, run_root=run_instance
         )
         self.assertFalse(validation.valid)
         self.assertIn("execution_traced", " ".join(validation.errors))
@@ -277,7 +288,7 @@ class RuntimeTestCase(unittest.TestCase):
                 "runtime.cli",
                 "validate-trace",
                 "--trace",
-                str(self.output_dir / "execution_trace.json"),
+                str(result.trace_path),
             ],
             cwd=REPOSITORY_ROOT,
             env=environment,
@@ -286,9 +297,9 @@ class RuntimeTestCase(unittest.TestCase):
         )
         self.assertEqual(validate.returncode, 0, validate.stdout + validate.stderr)
 
-        trace = json.loads((self.output_dir / "execution_trace.json").read_text())
+        trace = json.loads(result.trace_path.read_text())
         trace["status"] = "FAILED"
-        corrupted = self.output_dir / "corrupted-trace.json"
+        corrupted = result.trace_path.parent / "corrupted-trace.json"
         corrupted.write_text(json.dumps(trace), encoding="utf-8")
         invalid = subprocess.run(
             [

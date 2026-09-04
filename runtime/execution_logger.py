@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from .models import (
+    AgentRuntimeError,
     ExecutionStep,
     ProofFlags,
     RunContext,
+    RunRecord,
     StateTransition,
     utc_now,
 )
@@ -32,7 +34,7 @@ class ExecutionLogger:
         self.artifacts: dict[str, str] = {}
         self.proof = ProofFlags()
         self.errors: list[dict[str, str]] = []
-        self.trace_path = context.output_dir / "execution_trace.json"
+        self.trace_path = context.trace_dir / "execution_trace.json"
 
     def set_skill_version(self, version: str) -> None:
         self.skill_version = version
@@ -96,13 +98,29 @@ class ExecutionLogger:
         self.finished_at = utc_now()
 
     def as_dict(self) -> dict[str, Any]:
+        input_refs = tuple(
+            input_ref.path.relative_to(self.context.run_root).as_posix()
+            for input_ref in self.context.inputs
+        )
+        run_record = RunRecord(
+            schema_version="1.0",
+            run_id=self.context.run_id,
+            project_id=self.context.project_id,
+            skill_name=self.context.skill_name,
+            skill_version=self.skill_version,
+            state=self.final_state,
+            input_refs=input_refs,
+            artifact_refs=tuple(sorted(self.artifacts.values())),
+            trace_ref="trace/execution_trace.json",
+        )
         return {
             "run_id": self.context.run_id,
+            "project_id": self.context.project_id,
             "task": self.context.task,
             "skill": self.context.skill_name,
             "version": self.skill_version,
-            "input_path": str(self.context.input_path) if self.context.input_path else None,
-            "output_dir": str(self.context.output_dir),
+            "input_refs": list(input_refs),
+            "run_record": run_record.to_dict(),
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "transitions": [transition.to_dict() for transition in self.transitions],
@@ -117,11 +135,24 @@ class ExecutionLogger:
     def persist(self) -> Path:
         """Write the current trace atomically and mark trace generation as proven."""
 
-        self.context.output_dir.mkdir(parents=True, exist_ok=True)
+        resolved_run_root = self.context.run_root.resolve()
+        resolved_trace_dir = self.context.trace_dir.resolve()
+        resolved_trace_path = self.trace_path.resolve()
+        try:
+            resolved_trace_dir.relative_to(resolved_run_root)
+            resolved_trace_path.relative_to(resolved_trace_dir)
+        except ValueError as exc:
+            raise AgentRuntimeError(
+                "Execution trace path escapes the current run",
+                code="TRACE_PATH_ESCAPE",
+            ) from exc
+        self.context.trace_dir.mkdir(parents=True, exist_ok=True)
         self.proof.execution_traced = True
         payload = json.dumps(self.as_dict(), ensure_ascii=False, indent=2, sort_keys=True)
         file_descriptor, temporary_name = tempfile.mkstemp(
-            prefix=".execution_trace.", suffix=".tmp", dir=str(self.context.output_dir)
+            prefix=".execution_trace.",
+            suffix=".tmp",
+            dir=str(self.context.trace_dir),
         )
         try:
             with os.fdopen(file_descriptor, "w", encoding="utf-8") as handle:

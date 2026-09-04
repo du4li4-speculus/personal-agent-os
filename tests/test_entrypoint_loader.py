@@ -35,6 +35,16 @@ class EntrypointLoaderTestCase(unittest.TestCase):
             REPOSITORY_ROOT / "runtime" / "state_machine.yaml",
             root / "runtime" / "state_machine.yaml",
         )
+        project_dir = root / "projects" / "test"
+        project_dir.mkdir(parents=True)
+        (project_dir / "project.yaml").write_text(
+            'schema_version: "1.0"\n'
+            "project_id: test\n"
+            "allowed_skills: [sample]\n"
+            "cognition_mode: optional\n"
+            "memory_policy: candidate_only\n",
+            encoding="utf-8",
+        )
         self.last_repository_root = root
         return root
 
@@ -131,8 +141,10 @@ class EntrypointLoaderTestCase(unittest.TestCase):
     def test_missing_required_capability_fails_before_execute(self) -> None:
         result = self.run_fixture(required_capabilities=("missing.capability",))
         self.assertIn("RUNTIME_CAPABILITY_MISSING", result.validation_errors[0])
-        marker = self.last_repository_root / "run" / "execution-started.txt"
-        self.assertFalse(marker.exists())
+        markers = list(
+            (self.last_repository_root / "run").rglob("execution-started.txt")
+        )
+        self.assertEqual(markers, [])
 
     def test_optional_capability_remains_optional(self) -> None:
         result = self.run_fixture(optional_capabilities=("missing.optional",))

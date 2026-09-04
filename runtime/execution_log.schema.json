@@ -1,12 +1,16 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Agent Execution Trace",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "run_id",
+    "project_id",
     "task",
     "skill",
     "version",
+    "input_refs",
+    "run_record",
     "started_at",
     "finished_at",
     "transitions",
@@ -14,39 +18,87 @@
     "artifacts",
     "proof",
     "status",
-    "final_state"
+    "final_state",
+    "errors"
   ],
   "properties": {
-    "run_id": {"type": "string", "minLength": 1},
-    "task": {"type": "string"},
-    "skill": {"type": "string"},
-    "version": {"type": "string"},
-    "input_path": {"type": ["string", "null"]},
-    "output_dir": {"type": "string"},
-    "started_at": {"type": "string", "minLength": 1},
+    "run_id": {"$ref": "#/$defs/nonblank"},
+    "project_id": {"$ref": "#/$defs/nonblank"},
+    "task": {"$ref": "#/$defs/nonblank"},
+    "skill": {"$ref": "#/$defs/nonblank"},
+    "version": {"$ref": "#/$defs/nonblank"},
+    "input_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "allOf": [
+          {"$ref": "#/$defs/relative_path"},
+          {"pattern": "^input/"}
+        ]
+      }
+    },
+    "run_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "run_id",
+        "project_id",
+        "skill_name",
+        "skill_version",
+        "state",
+        "input_refs",
+        "artifact_refs",
+        "trace_ref"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "run_id": {"$ref": "#/$defs/nonblank"},
+        "project_id": {"$ref": "#/$defs/nonblank"},
+        "skill_name": {"$ref": "#/$defs/nonblank"},
+        "skill_version": {"$ref": "#/$defs/nonblank"},
+        "state": {"$ref": "#/$defs/nonblank"},
+        "input_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/relative_path"}
+        },
+        "artifact_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/relative_path"}
+        },
+        "trace_ref": {"const": "trace/execution_trace.json"}
+      }
+    },
+    "started_at": {"$ref": "#/$defs/nonblank"},
     "finished_at": {"type": ["string", "null"]},
     "transitions": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["from", "to", "at"],
         "properties": {
           "from": {"type": ["string", "null"]},
-          "to": {"type": "string", "minLength": 1},
-          "at": {"type": "string", "minLength": 1},
+          "to": {"$ref": "#/$defs/nonblank"},
+          "at": {"$ref": "#/$defs/nonblank"},
           "reason": {"type": "string"}
         }
       }
     },
     "steps": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["name", "status", "at", "details"],
         "properties": {
-          "name": {"type": "string", "minLength": 1},
-          "status": {"type": "string", "minLength": 1},
-          "at": {"type": "string", "minLength": 1},
+          "name": {"$ref": "#/$defs/nonblank"},
+          "status": {"$ref": "#/$defs/nonblank"},
+          "at": {"$ref": "#/$defs/nonblank"},
           "details": {"type": "object"},
           "error_code": {"type": "string"},
           "error_message": {"type": "string"}
@@ -55,10 +107,16 @@
     },
     "artifacts": {
       "type": "object",
-      "additionalProperties": {"type": "string"}
+      "additionalProperties": {
+        "allOf": [
+          {"$ref": "#/$defs/relative_path"},
+          {"pattern": "^artifacts/"}
+        ]
+      }
     },
     "proof": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "skill_loaded",
         "runtime_checked",
@@ -75,7 +133,28 @@
       }
     },
     "status": {"enum": ["RUNNING", "SUCCEEDED", "FAILED"]},
-    "final_state": {"type": "string", "minLength": 1},
-    "errors": {"type": "array"}
+    "final_state": {"$ref": "#/$defs/nonblank"},
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"$ref": "#/$defs/nonblank"},
+          "message": {"type": "string"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    }
   }
 }

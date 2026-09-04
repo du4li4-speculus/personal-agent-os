@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
-from uuid import uuid4
 
 
 CapabilityProvider = Callable[[str, Mapping[str, Any]], Mapping[str, Any]]
@@ -152,6 +151,19 @@ class RunRecord:
     artifact_refs: Tuple[str, ...]
     trace_ref: str
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "run_id": self.run_id,
+            "project_id": self.project_id,
+            "skill_name": self.skill_name,
+            "skill_version": self.skill_version,
+            "state": self.state,
+            "input_refs": list(self.input_refs),
+            "artifact_refs": list(self.artifact_refs),
+            "trace_ref": self.trace_ref,
+        }
+
 
 @dataclass(frozen=True)
 class MemoryCandidate:
@@ -227,33 +239,44 @@ class LoadedSkill:
 
 
 @dataclass(frozen=True)
+class RunPaths:
+    root: Path
+    input_dir: Path
+    work_dir: Path
+    artifact_dir: Path
+    trace_dir: Path
+    memory_dir: Path
+
+
+@dataclass(frozen=True)
 class RunContext:
     run_id: str
     task: str
     skill_name: str
     project_id: str
     repository_root: Path
-    output_dir: Path
+    run_paths: RunPaths
     inputs: Tuple[InputRef, ...] = ()
 
     @classmethod
     def create(
         cls,
         *,
+        run_id: str,
         task: str,
         skill_name: str,
         project_id: str,
         repository_root: Path,
-        output_dir: Path,
+        run_paths: RunPaths,
         inputs: Tuple[InputRef, ...] = (),
     ) -> "RunContext":
         return cls(
-            run_id=str(uuid4()),
+            run_id=run_id,
             task=task,
             skill_name=skill_name,
             project_id=project_id,
             repository_root=repository_root.resolve(),
-            output_dir=output_dir.resolve(),
+            run_paths=run_paths,
             inputs=tuple(
                 InputRef(
                     path=Path(input_ref.path).resolve(),
@@ -265,8 +288,38 @@ class RunContext:
         )
 
     @property
+    def run_root(self) -> Path:
+        return self.run_paths.root
+
+    @property
+    def input_dir(self) -> Path:
+        return self.run_paths.input_dir
+
+    @property
+    def work_dir(self) -> Path:
+        return self.run_paths.work_dir
+
+    @property
+    def artifact_dir(self) -> Path:
+        return self.run_paths.artifact_dir
+
+    @property
+    def trace_dir(self) -> Path:
+        return self.run_paths.trace_dir
+
+    @property
+    def memory_dir(self) -> Path:
+        return self.run_paths.memory_dir
+
+    @property
+    def output_dir(self) -> Path:
+        """Compatibility alias for the run-scoped final artifact directory."""
+
+        return self.artifact_dir
+
+    @property
     def input_path(self) -> Optional[Path]:
-        """Compatibility projection until Task 6 records all staged inputs."""
+        """Compatibility projection for single-input Skills."""
 
         return self.inputs[0].path if len(self.inputs) == 1 else None
 
