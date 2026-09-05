@@ -23,6 +23,8 @@ The chain is the normative ownership and execution-authority flow. A downstream 
 
 The chain is not a literal source-code dependency diagram. Runtime may read validated downstream Registry and Skill descriptors and dynamically invoke a declared entrypoint through generic interfaces. Runtime source must not directly import domain Skill packages, and a Project reference to an allowed Skill does not transfer Skill semantics into Project configuration.
 
+Capability providers are typed infrastructure ports whose identifiers and payloads remain opaque to Runtime. Provider availability does not grant Runtime domain ownership; the canonical rules are in `docs/policies/RUNTIME_POLICY.md`.
+
 ## Layer responsibility summary
 
 | Layer | Owns | Excludes |
@@ -36,16 +38,24 @@ The chain is not a literal source-code dependency diagram. Runtime may read vali
 | Artifacts | Run-scoped outputs created under contract | Persistent policy or Memory |
 | Memory Candidate | Evidence-linked proposal after validation | Automatic persistent-Memory mutation |
 
-## Cognition techniques
+## Cognition and Agent proof boundaries
 
 Cognition can use random-seed divergence, cross-domain analogy, adversarial review, and evaluation functions as reusable methods. These techniques do not grant Cognition ownership of TOEFL rules, Project decisions, or Runtime code.
+
+Protocol selection or loading is not execution proof. The trace distinguishes loaded, executed, skipped, blocked, and validated Cognition states under `core/workflow.md` and ADR-0005.
+
+Agents are evaluated roles, not knowledge containers. Their declarations must satisfy `contracts/agent-role.schema.json`, including evaluation criteria and explanations of why an Agent is required and why a Skill is insufficient. Detailed ownership remains in `docs/policies/AGENT_ROLE_POLICY.md`.
 
 ## Data ownership summary
 
 - Tracked Project configuration belongs under `projects/`.
 - Run inputs, work files, artifacts, traces, and candidates belong under `runs/<project-id>/<run-id>/`.
-- Promoted knowledge belongs under global, Project, or Skill Memory according to `docs/policies/MEMORY_POLICY.md`.
+- Promoted knowledge belongs under global, Project, or Skill Memory according to `docs/policies/MEMORY_POLICY.md`; Runtime can create only a run-local proposed Memory Candidate and owns no promotion path.
 - Skill source directories are not permanent run storage.
+
+## Registry status boundary
+
+Registry is the only Skill discovery/status authority. Every `active` Skill must pass Registry/manifest validation and resolve a safe Skill-local entrypoint. A `development` Skill may have an incomplete executable contract but receives no execution authority. `toefl-writing-grader` remains `development`; its truth source is `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md`.
 
 ## Canonical policies
 
@@ -58,3 +68,9 @@ Cognition can use random-seed divergence, cross-domain analogy, adversarial revi
 ## Architecture decisions
 
 Accepted rationale and rejected alternatives are indexed in `docs/adr/README.md`. A change that contradicts an accepted ADR stops before implementation until the repository owner approves a new or superseding decision.
+
+`docs/PLAN_STATUS.md` is the authority for current versus historical plans. Historical plans remain provenance and do not override this document, canonical policies, accepted ADRs, or machine contracts.
+
+## Automated enforcement
+
+`tests/test_architecture_boundaries.py` audits Runtime imports, persistent-Memory write targets, tracked run/output data, active and development Skill status behavior, Agent-role rejection, and canonical authority links against the actual repository. `.github/workflows/ci.yml` runs that audit with contract validation, the full unit suite, and whitespace checks.

@@ -52,6 +52,10 @@ Runtime may use Registry to locate a Skill manifest and entrypoint. Runtime then
 - Status reflects executable readiness rather than documentation completeness.
 - A version or status mismatch fails closed.
 - Registry never silently selects, upgrades, or downgrades a Skill version.
+- Repository checks validate every `active` Skill through the real Registry, manifest, and safe entrypoint loaders.
+- A `development` Skill may omit an entrypoint or other executable stages, but Registry does not advertise it as an active capability.
+
+`toefl-writing-grader` remains `development` until every gate in `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md` passes. Historical plans cannot change Registry truth; `docs/PLAN_STATUS.md` identifies their authority status.
 
 ## Change process
 
@@ -62,3 +66,5 @@ Changes to Registry ownership or status semantics require the Expansion, Critiqu
 - `docs/policies/RUNTIME_POLICY.md`
 - `docs/policies/EXTENSION_POLICY.md`
 - `docs/adr/0003-resolve-skills-through-registry-entrypoints.md`
+- `docs/PLAN_STATUS.md`
+- `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md`

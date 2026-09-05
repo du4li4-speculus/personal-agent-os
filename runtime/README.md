@@ -10,10 +10,15 @@ Runtime turns workflow rules into executable control. The implementation is a sm
 - `capabilities` — exposes host infrastructure through opaque, typed provider ports.
 - `state_manager` — validates and enforces `runtime/state_machine.yaml`.
 - `execution_logger` — writes atomic JSON execution traces.
-- `artifact_manager` — validates exact, non-empty, in-directory manifest outputs.
-- `validator_engine` — validates execution proof and persisted artifact references.
+- `artifact_manager` — structurally admits exact, contained, regular, non-empty outputs and normalizes run-relative references.
+- `validator_engine` — validates complete state-machine transitions, execution proof, and persisted run references.
+- `cognition_manager` — applies typed policy-controlled Cognition hooks without model or domain logic.
+- `project_loader` and `run_store` — validate declarative Project selection and isolate run-instance data.
+- `memory_manager` — validates at most one run-local proposed Memory Candidate; it has no persistent promotion API.
 - `runner` — orchestrates the lifecycle and fail-closed recovery policy.
-- `cli` — provides the deterministic demo and trace validation commands.
+- `cli` — lists Registry status, validates contracts/traces, and invokes only the managed Runtime path.
+
+Canonical ownership is defined in `docs/ARCHITECTURE_BOUNDARIES.md`; Runtime invariants are defined in `docs/policies/RUNTIME_POLICY.md`.
 
 ## Setup
 
@@ -50,6 +55,8 @@ Entrypoint `python_path` values must be relative, must not contain `..`, and mus
 ## Commands
 
 ```bash
+python -m runtime.cli list-skills
+python -m runtime.cli validate-contracts
 python -m unittest discover -s tests -v
 python -m runtime.cli validate-trace \
   --trace /path/to/run/execution_trace.json
@@ -59,6 +66,12 @@ python -m runtime.cli validate-trace \
 
 ## Proof and failure behavior
 
-The runner writes `execution_trace.json` with the run id, version, state transitions, steps, artifacts, errors, and proof flags. A run reaches `DELIVER` only after Registry and Skill loading, required-capability checks, registered-entrypoint execution, artifact validation, and trace validation have all completed.
+The runner writes `execution_trace.json` with the run id, version, state transitions, steps, artifacts, errors, and proof flags. Persisted transitions are checked against the complete canonical state machine. The human-readable lifecycle and Cognition proof contract are maintained in `core/workflow.md`.
+
+`ARTIFACT` proves structural admission only; it does not prove domain/schema/semantic correctness, Cognition approval, final validation, or deliverability. A run reaches `DELIVER` only after the later validation gates pass.
 
 Recoverable output-directory readiness errors can retry once through `RECOVERY`. Contract, entrypoint, capability, artifact, and validation failures end in `FAILED`. Registry and manifest versions must match exactly.
+
+## Data boundary
+
+Runtime stages inputs and writes work files, artifacts, traces, and optional Memory Candidates only under `runs/<project-id>/<run-id>/`. Persistent global, Project, and Skill Memory remain outside `AgentRuntime.run()` ownership. The canonical Project and Memory rules are in `docs/policies/PROJECT_BOUNDARY_POLICY.md` and `docs/policies/MEMORY_POLICY.md`.
