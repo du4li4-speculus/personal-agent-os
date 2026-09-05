@@ -67,7 +67,7 @@ class ImageAdapter(InputAdapter):
                     {
                         "asset_id": f"image-{digest[:12]}",
                         "filename": filename,
-                        "uri": str(path),
+                        "uri": str(path) if path else None,
                         "sha256": digest,
                         "ocr_status": "pending",
                     }

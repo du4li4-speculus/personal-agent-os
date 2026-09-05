@@ -2,6 +2,8 @@ schema_version: "1.0"
 name: toefl-writing-grader
 version: "2.0.0"
 kind: workflow
+# Development-only target contract. The absent entrypoint is intentional until
+# every gate in docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md actually passes.
 inputs:
   contract: schemas/source_bundle.schema.json
   accepted_formats: [text, image, screenshot, pdf, document, pages]
@@ -13,6 +15,7 @@ intermediate_outputs:
     path: work/evidence.json
     schema: schemas/evidence.schema.json
 outputs:
+  # Target outputs are declarations, not claims of current implementation.
   - name: assessment
     path: artifacts/assessment.json
     schema: schemas/assessment.schema.json

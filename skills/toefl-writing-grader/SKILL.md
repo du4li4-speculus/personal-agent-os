@@ -1,6 +1,6 @@
 ---
 name: toefl-writing-grader
-description: Use when grading TOEFL Write an Email or Write for an Academic Discussion submissions through the Agent OS evidence and validation pipeline.
+description: Development-stage TOEFL writing contract with executable input normalization and evidence extraction; the complete grading workflow is not yet active.
 agent_created: true
 ---
 
@@ -8,7 +8,13 @@ agent_created: true
 
 ## Purpose
 
-将 TOEFL Write an Email 与 Write for an Academic Discussion 的既有批改逻辑接入 Agent OS。输入先经过适配和证据提取，再进入当前 rubric、诊断、学习闭环、读者产物与验证；本 Skill 不以 `.pages` 作为唯一输入，也不在证据不足时补写原文。
+定义 TOEFL Write an Email 与 Write for an Academic Discussion 接入 Agent OS 的领域边界。输入先经过适配和证据提取，完整目标流程再进入当前 rubric、诊断、学习闭环、读者产物与验证；本 Skill 不以 `.pages` 作为唯一输入，也不在证据不足时补写原文。
+
+## Implementation status
+
+Registry status is `development`. The executable code currently covers input normalization, provenance preservation, evidence extraction, assessment-readiness gating, and validation of the source/evidence schemas. The composite Skill has no registered entrypoint.
+
+Assessment, diagnosis, learning-loop execution, student/parent PDF rendering, teacher-dashboard rendering, and end-to-end domain validation are not implemented. The rules, schemas, templates, and historical artifacts below define or preserve domain intent; they are not execution proof. Activation requires every gate in `../../docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md` to pass.
 
 ## 当前生效规则（唯一评分清单）
 
@@ -60,7 +66,7 @@ Compatibility invariants: Never assess without source evidence. Never generate r
 - 教师可以覆盖 AI 诊断，但覆盖必须保留为 `teacher_override` 与 `validation_record`，不会自动改写评分规则。
 - 本次迁移只补齐 Skill 内的输入、证据、评估、诊断、学习、产物和验证契约；不修改 Agent OS runtime，不删除既有 schema/template。
 
-## 交付前门禁
+## 目标交付门禁（尚未形成完整可执行链路）
 
 1. 校验 source bundle、evidence 和 assessment 配置；失败先修配置或实现，不能删掉必需内容绕过。
 2. 校验每篇六维详细评价与雷达、同题型多篇顺序、预测总分和量化输入同步。
@@ -68,7 +74,9 @@ Compatibility invariants: Never assess without source evidence. Never generate r
 4. 对照 `validation/README.md` 清除读者侧内部标签、规则来源、假设性错误示例和家长原句示例。
 5. 验证失败即不交付；修复后重新生成并重新验证。
 
-## 执行顺序
+## 目标执行顺序
+
+当前只有第 2–3 步及其 source/evidence schema 校验具有可执行实现。其余步骤描述激活前必须完成的领域流程，不代表当前 Runtime 已能执行或交付。
 
 1. 读取题目截图/文字，登记题目来源和缺失项。
 2. 用输入适配器生成 `source_bundle.json`。

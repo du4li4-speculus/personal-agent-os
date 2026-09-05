@@ -13,6 +13,7 @@ cases:
       source_kind: text
       evidence_type: response_text
       assessment_ready_requires_prompt: true
+      missing_prompt_gap: PROMPT_NOT_EXPLICITLY_PROVIDED
 
   - id: screenshot_prompt
     input: {format: png, role: prompt}
@@ -22,6 +23,8 @@ cases:
       extraction_status: pending_ocr
       evidence_type: image_reference
       assessment_blocked_until: ocr_or_visual_transcription
+      inline_uri: null
+      inferred_text: null
 
   - id: pdf_document
     input: {format: pdf, role: response}
@@ -30,6 +33,7 @@ cases:
       source_kind: document
       accepted_statuses: [complete, pending]
       evidence_must_preserve_gap: true
+      pending_text_must_not_be_invented: true
 
   - id: docx_document
     input: {format: docx, role: response}
@@ -54,3 +58,6 @@ invariants:
   - evidence_text_is_not_completed_by_inference
   - prompt_and_response_roles_are_explicit
   - no_score_fields_are_created_by_adapters_or_extractor
+  - no_rubric_diagnosis_or_learning_fields_are_created_upstream
+  - assessment_ready_requires_explicit_prompt_and_response_without_blocking_gaps
+  - unresolved_image_or_document_text_remains_pending_or_gapped
