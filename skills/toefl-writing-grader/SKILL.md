@@ -1,19 +1,99 @@
-# TOEFL Writing Grader v2
+---
+name: toefl-writing-grader
+description: Development-stage TOEFL writing contract with executable input normalization and evidence extraction; the complete grading workflow is not yet active.
+agent_created: true
+---
+
+# TOEFL 写作批改与 Agent OS Skill
 
 ## Purpose
-A teaching workflow system for TOEFL writing assessment.
 
-## Pipeline
-1. Evidence extraction
-2. Assessment
-3. Diagnostic schema generation
-4. Learning loop generation
-5. Practice generator connection
-6. Artifact generation
-7. Validation
+定义 TOEFL Write an Email 与 Write for an Academic Discussion 接入 Agent OS 的领域边界。输入先经过适配和证据提取，完整目标流程再进入当前 rubric、诊断、学习闭环、读者产物与验证；本 Skill 不以 `.pages` 作为唯一输入，也不在证据不足时补写原文。
 
-## Rules
-- Never assess without source evidence.
-- Never generate reports without validation.
-- Teacher judgment can override AI diagnosis.
-- Overrides become improvement data, not automatic rule changes.
+## Implementation status
+
+Registry status is `development`. The executable code currently covers input normalization, provenance preservation, evidence extraction, assessment-readiness gating, and validation of the source/evidence schemas. The composite Skill has no registered entrypoint.
+
+Assessment, diagnosis, learning-loop execution, student/parent PDF rendering, teacher-dashboard rendering, and end-to-end domain validation are not implemented. The rules, schemas, templates, and historical artifacts below define or preserve domain intent; they are not execution proof. Activation requires every gate in `../../docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md` to pass.
+
+## 当前生效规则（唯一评分清单）
+
+本节是迁移后的当前规则；历史评分、旧模板、教师内部话术和事故背景只能用于追溯，不能覆盖本节。可执行的数据契约位于 `schemas/`，各阶段边界位于 `input/`、`evidence/`、`assessment/`、`diagnosis/`、`learning/`、`artifacts/` 和 `validation/`。
+
+Compatibility invariants: Never assess without source evidence. Never generate reports without validation. Teacher judgment can override AI diagnosis, and overrides become improvement data rather than automatic rule changes.
+
+### 1. 事实源与题目核验
+
+- 批改文本只能来自用户本次提供的文件。先适配、提取并保存证据，再评分；正文真实断尾原样保留，禁止用记忆、旧稿、其他学生文本或语义推测补写。
+- 学生姓名一律以本次文件与落款为准；禁止依据历史档案或猜测自行推断、替换姓名。交付前复查构建配置、PDF 文件名、PDF 首页、归档目录和记忆记录五处姓名是否一致。
+- 批改过程记录和回复中不得写“与某批次/学生同题”；题目直接描述本次内容，不做跨学生同题对照。
+- 批改前读取本次题目截图或题目文字，并与正文提取结果交叉核验；题目缺失时如实记录缺失，不得假称已核验。
+- `.pages` 必须检查 `Index/Document.iwa` 的第一行/开头及全文中文字段，确认是否存在造句批注（如「造句：错 x/10」）；`AnnotationAuthorStorage` 为空不代表没有批注。
+- 邮件按题目逐行拆任务。一行出现 `and` 时拆成多个子问题，逐项核对回答与扩展。
+- 学术讨论检查从题目要求起点推进到终点的议论与事例逻辑链，只有观点句不算完整扣题。
+- 学术扣题以题目最后 1–2 句问句中的核心概念为锚；`such as` 后的例子不要求逐条覆盖。只有问句含 `which approach` / `which way` 等比较词时，才回到题干选项；存在多个选项时，完整覆盖任意一方即可视为切题干净，不要求两方都写。
+- 没有教师修订或批注时，按当前 rubric 自评，并把分数、弱点和证据显式录入；不得假装文件含有批注。
+
+### 2. 当前交付结构
+
+- 学生版与家长版默认生成 Glass PDF；主题按简报日期星期选择，除非用户明确指定其他格式。
+- 学生版首页顺序固定为三分数卡 → 上框 → 下框。分数卡标签为「邮件写作得分」「学术写作得分」「折算总分」；显示折算总分时同时显示「造句按 x 个错计算」。上框只放邮件和学术六维雷达，下框只放量化指标雷达和学术写作能力光谱。
+- 家长版严格单页：三分数卡 → 两类写作雷达 → 量化雷达与能力光谱 → 1 个最大优点 + 2 个待提升方面 → 对应 2 条改进动作；超过一页即失败，不得静默删减。
+- 当前读者文件不渲染历史总览表、免责声明、内部规则来源、内部等级代码、教师术语或假设性错误示例；家长版不放学生原句示例。
+
+### 3. 评分与数据同步
+
+- 邮件与学术各自使用六维评分。每篇详细评价必须有 6 个显式 2–5 分，首页对应雷达必须使用完全相同的 6 个标签和分值。
+- 六维独立评分：同一问题不得重复扣分。立场/选边摇摆本身不扣分；逻辑和衔接只评衔接手段；句子功能只评内部复杂度；词汇只评词汇；语法只按错误个数。
+- 学术论证中，「1 条议论 + 1 条举例」若都支撑同一论点且未提出第二分论点，按 2 条扩展处理；逐逻辑层次检查，任一层少于 5 个词则不计有效扩展。各层均足够且起点—终点完整时，该线索可按成立计分。
+- 邮件「社交规范与受众意识」以礼貌互动、收件人角色与沟通目的为核心；格式只占小比重。5 分要求格式不主导、至少一处请求/建议同时体现角色意识或结果推理且互动句得体；4 分为互动句均得体但缺少明确角色/结果意识或仅一处轻微不足；3 分允许一处不足；2 分为两处及以上不足或语气明显不合适。复核称谓匹配、情感词、口语连接词、sign-off、称谓等级和裸命令句。称谓不匹配使该维度不超过 4；语域至少两项不达标或出现裸命令，在原定档下调一档。邮件不计分段、连接词/链接词；按任务全答和组织由切题、扩展与结构分别评定。
+- 语法全篇计数：少于 5 处=5，少于 8 处=4，少于 11 处=3，11–15 处=2，16 处及以上仍为 2；超过 10 处时该篇总分不超过 4。严重错误单独标记「需重炼」，包括句法破裂、双连词、使役形式、comma splice、不定式/关系从句堆叠致破裂。动词+介词、名词+介词、动宾搭配必须单独统计并列出，且计入语法错误总数。
+- 邮件扩展按逐问评定；每个任务要点至少 2 个具体细节才算充分，少于 2 个时扩展与细节不超过 4。原创关键词语义云与细节数量分开统计。
+- 词汇和句型按全文高端精准词与主流使用词定档，题目原词不计分；读者文案不得出现 CEFR 内部标签。学术 4–5 个高端词=5、2–3 个=4.5、1–2 个=4；邮件 3–4 个=5、1–2 个=4；高端词为 0 但主流词达标=3，否则或词形错误密集=2。邮件句型复杂度与词汇档取较低者：关系从句或分词结构至少一个为 4；从句、分词、并列三类任意两类组合为 5；无关系从句且无分词结构为 3。
+- 学术句子功能只评句内 compound/complex 结构，与逻辑衔接分开；1 个并列 + 1 个复杂结构约为 4，再增加从句或短语结构为 5。只对混乱堆叠扣分，清晰三层嵌套不扣；四层、额外并列或结构混乱才扣 1。
+- 学术先识别题型（问题-解决、观点、比较、选择、原因-影响、重要性）；完全偏题为 2。切题四档为起点+终点准确=5、只有起点≤4、信息损失/不准=3、至少 2 个游离句=2。单段到底和教授问候不构成失败。
+- 原创关键词必须位于题目关键词语义云内，不能只是照抄题目词；每个任务要点至少 2 个原创关键词才支持 5 分档，任一点不足时切题不超过 4。漏掉题目给出的 repair / replacement / refund 等选项直接降档。
+- 学术连接率：≤60%=3，60%–80%=4，>80%=5。显式连接词、指代/复现、或 semantic cloud 中的语义相连均算已连接。
+- 同题型多篇逐篇独立六维评分和作图；`ability_charts` 按题型内篇序与 `pieces` 对应，数量不足直接报错。分数卡、预测总分和量化雷达使用同题型平均；家长版每题型只放一张平均图。
+- 生成前通过 `assert_score_sync`、`assert_predict_total_sync` 和 `assert_config_complete`；量化雷达只能从 `quant_inputs` 自动计算，不能手填。单篇只统计已提交题型，缺失题型的相关量化维度以 `n/a` 作图，不把缺失当成低分。
+- 学术写作能力光谱固定六维、五分制：句式复杂度、词汇精确度、公式化框架、搭配控制、衔接手段、语域与正式度；用全文中每一维最强有效证据确定上限，不取平均或最弱值。
+- 六维平均分≤4.0 时取整数；>4.0 时保留 0.5 台阶（22/6=3.67 → 4.0；26/6=4.33 → 4.5）。预测总分只能由契约计算；单题型且另一题型未补全 `score_inputs` 时省略预测总分。
+
+### 4. 单一事实源与边界
+
+- `source_bundle.json` 是输入事实的统一来源，`evidence.json` 是评分前可追溯证据的统一来源；assessment 不直接读取原始附件绕过证据层。
+- 学生版、家长版、教师 dashboard 共享同一评分、六维图、`quant_inputs`、光谱和文章数据；家长版不得另写一套量化映射。
+- 教师可以覆盖 AI 诊断，但覆盖必须保留为 `teacher_override` 与 `validation_record`，不会自动改写评分规则。
+- 本次迁移只补齐 Skill 内的输入、证据、评估、诊断、学习、产物和验证契约；不修改 Agent OS runtime，不删除既有 schema/template。
+
+## 目标交付门禁（尚未形成完整可执行链路）
+
+1. 校验 source bundle、evidence 和 assessment 配置；失败先修配置或实现，不能删掉必需内容绕过。
+2. 校验每篇六维详细评价与雷达、同题型多篇顺序、预测总分和量化输入同步。
+3. 对学生/家长真实 PDF 做文本和页数验收；家长版必须实际为 1 页，学生版必须含当前提交题型的逐篇原文/点评。
+4. 对照 `validation/README.md` 清除读者侧内部标签、规则来源、假设性错误示例和家长原句示例。
+5. 验证失败即不交付；修复后重新生成并重新验证。
+
+## 目标执行顺序
+
+当前只有第 2–3 步及其 source/evidence schema 校验具有可执行实现。其余步骤描述激活前必须完成的领域流程，不代表当前 Runtime 已能执行或交付。
+
+1. 读取题目截图/文字，登记题目来源和缺失项。
+2. 用输入适配器生成 `source_bundle.json`。
+3. 用证据提取器生成 `evidence.json`，标出真实断尾、批注和 OCR/解析缺口。
+4. 依据本文件当前规则，将显式六维分数、证据、`quant_inputs`、光谱和文章原文写入 assessment 配置。
+5. 生成诊断与学习闭环，记录教师覆盖和验证记录。
+6. 通过契约和成品验证后，才交付学生/家长/教师产物。
+
+## 目录映射
+
+| 领域逻辑 | Agent OS Skill 位置 |
+| --- | --- |
+| 多格式输入 | `input/`、`input_adapters/` |
+| 原文、题目、批注证据 | `evidence/`、`extractor/` |
+| 当前 TOEFL rubric | 本文件第 3 节、`assessment/` |
+| 诊断与证据回链 | `diagnosis/`、`schemas/diagnostic.schema.json` |
+| 学习闭环 | `learning/`、`schemas/learning_loop.schema.json` |
+| 学生/家长/教师产物 | `artifacts/`、`schemas/artifact.schema.json` |
+| 门禁、红线、9 月标准 | `validation/`、`schemas/validation_record.schema.json` |
+| 历史追溯 | `references/`，不覆盖当前规则 |

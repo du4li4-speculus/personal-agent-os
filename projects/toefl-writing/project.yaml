@@ -1,0 +1,5 @@
+schema_version: "1.0"
+project_id: toefl-writing
+allowed_skills: [toefl-writing-grader]
+cognition_mode: optional
+memory_policy: candidate_only

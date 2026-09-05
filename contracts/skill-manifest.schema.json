@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/skill-manifest.schema.json",
+  "title": "Agent OS Skill Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "version",
+    "kind",
+    "inputs",
+    "intermediate_outputs",
+    "outputs",
+    "capabilities",
+    "cognition"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "name": {"$ref": "#/$defs/nonblank"},
+    "version": {"$ref": "#/$defs/nonblank"},
+    "kind": {"$ref": "#/$defs/nonblank"},
+    "entrypoint": {"$ref": "#/$defs/entrypoint"},
+    "inputs": {"$ref": "#/$defs/inputs"},
+    "intermediate_outputs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "capabilities": {"$ref": "#/$defs/capabilities"},
+    "cognition": {"$ref": "#/$defs/cognition"}
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_path", "module", "callable"],
+      "properties": {
+        "python_path": {"$ref": "#/$defs/relative_path"},
+        "module": {"$ref": "#/$defs/nonblank"},
+        "callable": {"$ref": "#/$defs/nonblank"}
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "accepted_formats"],
+      "properties": {
+        "contract": {"$ref": "#/$defs/relative_path"},
+        "accepted_formats": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path"],
+      "properties": {
+        "name": {"$ref": "#/$defs/nonblank"},
+        "path": {"$ref": "#/$defs/relative_path"},
+        "schema": {"$ref": "#/$defs/relative_path"}
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "optional"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        },
+        "optional": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        }
+      }
+    },
+    "cognition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "prepare", "critique", "memory_review"],
+      "properties": {
+        "mode": {"enum": ["disabled", "optional", "required"]},
+        "prepare": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        },
+        "critique": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        },
+        "memory_review": {"$ref": "#/$defs/nonblank"}
+      }
+    }
+  }
+}

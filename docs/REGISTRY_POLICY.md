@@ -1,59 +1,73 @@
-# Registry Policy v0.1
+# Registry Policy v0.3+
 
 ## Purpose
 
-Define what should be registered in Agent OS registry and prevent confusion between capabilities, reasoning protocols, and system rules.
+Make Registry the single discovery authority for executable capabilities without moving reasoning, policy, Memory, or domain implementation into Registry.
 
-## Registry Responsibility
+## Registry responsibility
 
-Registry contains discoverable and callable capabilities.
+Registry owns only:
 
-A component belongs in registry only when it has:
+- Skill identity;
+- declared version;
+- lifecycle status such as `active` or `development`;
+- Skill-root and manifest resolution;
+- entrypoint discovery for active Skills.
 
-- a clear purpose
-- defined inputs and outputs
-- independent execution capability
-- versioning requirements
-- validation or testing requirements
+Registry metadata must be machine-verifiable against the resolved Skill manifest. Registry does not execute a Skill and does not validate domain semantics.
 
-## Should Be Registered
+## Registration gate
 
-Examples:
+A Registry entry requires:
 
-- domain skills
-- reusable tools
-- execution capabilities
+- a stable identity and version;
+- an owned Skill path and manifest path;
+- defined inputs, intermediate outputs, final outputs, and validators in the manifest;
+- required and optional capability declarations;
+- tests appropriate to its advertised status.
 
-Examples:
+An `active` Skill also requires a safe, resolvable entrypoint. A Skill without a complete entrypoint contract remains `development`; Registry must not compensate with a fake entrypoint or caller-supplied executor.
 
-- TOEFL writing evaluation
-- document generation
-- data analysis
+## Excluded ownership
 
-## Should Not Be Registered
+Registry does not own or register:
 
-Do not register:
+- reasoning protocols;
+- persistent Memory;
+- user preferences;
+- architecture rules;
+- Core invariants;
+- Project decisions;
+- domain algorithms, scoring rules, or validators themselves.
 
-- cognition protocols
-- architecture rules
-- global principles
-- memory files
-- project decisions
+These concerns remain in Cognition, Memory, Core, Project, or Skill according to `docs/ARCHITECTURE_BOUNDARIES.md`.
 
-These belong to their respective layers.
+## Resolution boundary
 
-## Layer Separation
+Runtime may use Registry to locate a Skill manifest and entrypoint. Runtime then enforces generic path, capability, lifecycle, trace, artifact, and validation gates. Dynamic resolution does not permit Runtime source to import a domain Skill package directly.
 
-Cognition Layer:
-- defines how agents think
-- provides reasoning protocols
+## Version and status truth
 
-Skill Layer:
-- defines what agents can do
-- provides executable capabilities
+- Registry and manifest versions match exactly.
+- Status reflects executable readiness rather than documentation completeness.
+- A version or status mismatch fails closed.
+- Registry never silently selects, upgrades, or downgrades a Skill version.
+- Repository checks validate every `active` Skill through the real Registry, manifest, and safe entrypoint loaders.
+- A `development` Skill may omit an entrypoint or other executable stages, but Registry does not advertise it as an active capability.
 
-Registry:
-- provides discovery and access to skills
+`toefl-writing-grader` remains `development` until every gate in `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md` passes. Historical plans cannot change Registry truth; `docs/PLAN_STATUS.md` identifies their authority status.
 
-Runtime:
-- manages execution and validation
+At the v0.3+ publication boundary, it is the only repository Registry entry and there are no production-active Skills. The observed branch, commit, and verification state is recorded in `docs/REPOSITORY_STATE.md`.
+
+## Change process
+
+Changes to Registry ownership or status semantics require the Expansion, Critique, and Decision gate and an ADR. Adding an ordinary Skill entry that satisfies the existing contract follows `docs/policies/EXTENSION_POLICY.md` and does not redefine Registry policy.
+
+## References
+
+- `docs/policies/RUNTIME_POLICY.md`
+- `docs/policies/EXTENSION_POLICY.md`
+- `docs/adr/0003-resolve-skills-through-registry-entrypoints.md`
+- `docs/PLAN_STATUS.md`
+- `docs/REPOSITORY_STATE.md`
+- `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md`

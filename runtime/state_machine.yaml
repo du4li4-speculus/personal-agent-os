@@ -1,34 +1,72 @@
 states:
   CREATED:
-    next: IDENTIFY_TASK
+    next:
+      - IDENTIFY_TASK
+      - FAILED
 
   IDENTIFY_TASK:
-    next: FIND_SKILL
+    next:
+      - FIND_SKILL
+      - FAILED
 
   FIND_SKILL:
     gate: skill_registry
-    next: LOAD_SKILL
+    next:
+      - LOAD_SKILL
+      - FAILED
 
   LOAD_SKILL:
     gate: skill_definition
-    next: RUNTIME_CHECK
+    next:
+      - RUNTIME_CHECK
+      - FAILED
 
   RUNTIME_CHECK:
     next:
-      - EXECUTE
+      - COGNITION_PREPARE
       - RECOVERY
+      - FAILED
+
+  RECOVERY:
+    next:
+      - RUNTIME_CHECK
+      - FAILED
+
+  COGNITION_PREPARE:
+    next:
+      - EXECUTE
+      - FAILED
 
   EXECUTE:
     requires:
       - execution_trace
-    next: ARTIFACT
+    next:
+      - ARTIFACT
+      - FAILED
 
   ARTIFACT:
     gate: artifact_validation
-    next: VALIDATE
+    next:
+      - COGNITION_CRITIQUE
+      - FAILED
+
+  COGNITION_CRITIQUE:
+    next:
+      - VALIDATE
+      - FAILED
 
   VALIDATE:
-    next: DELIVER
+    next:
+      - MEMORY_REVIEW
+      - FAILED
+
+  MEMORY_REVIEW:
+    next:
+      - DELIVER
+      - FAILED
 
   DELIVER:
+    final: true
+
+  FAILED:
     final: true

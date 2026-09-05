@@ -1,0 +1,23 @@
+schema_version: "1.0"
+name: sample
+version: "1.0.0"
+kind: workflow
+entrypoint:
+  python_path: src
+  module: sample_skill.entrypoint
+  callable: execute
+inputs:
+  contract: schemas/input.schema.json
+  accepted_formats: [text]
+intermediate_outputs: []
+outputs:
+  - name: result
+    path: result.txt
+capabilities:
+  required: []
+  optional: [fixture.echo]
+cognition:
+  mode: optional
+  prepare: [decision]
+  critique: [critique]
+  memory_review: memory

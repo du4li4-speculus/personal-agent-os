@@ -1,13 +1,225 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Agent Execution Trace",
   "type": "object",
-  "required": ["task", "skill", "version", "steps", "status"],
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "project_id",
+    "task",
+    "skill",
+    "version",
+    "input_refs",
+    "run_record",
+    "cognition_policy",
+    "cognition",
+    "started_at",
+    "finished_at",
+    "transitions",
+    "steps",
+    "artifacts",
+    "proof",
+    "status",
+    "final_state",
+    "errors"
+  ],
   "properties": {
-    "task": {"type": "string"},
-    "skill": {"type": "string"},
-    "version": {"type": "string"},
-    "steps": {"type": "array"},
-    "status": {"type": "string"}
+    "run_id": {"$ref": "#/$defs/nonblank"},
+    "project_id": {"$ref": "#/$defs/nonblank"},
+    "task": {"$ref": "#/$defs/nonblank"},
+    "skill": {"$ref": "#/$defs/nonblank"},
+    "version": {"$ref": "#/$defs/nonblank"},
+    "input_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "allOf": [
+          {"$ref": "#/$defs/relative_path"},
+          {"pattern": "^input/"}
+        ]
+      }
+    },
+    "run_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "run_id",
+        "project_id",
+        "skill_name",
+        "skill_version",
+        "state",
+        "input_refs",
+        "artifact_refs",
+        "trace_ref"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "run_id": {"$ref": "#/$defs/nonblank"},
+        "project_id": {"$ref": "#/$defs/nonblank"},
+        "skill_name": {"$ref": "#/$defs/nonblank"},
+        "skill_version": {"$ref": "#/$defs/nonblank"},
+        "state": {"$ref": "#/$defs/nonblank"},
+        "input_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/relative_path"}
+        },
+        "artifact_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/relative_path"}
+        },
+        "trace_ref": {"const": "trace/execution_trace.json"}
+      }
+    },
+    "cognition_policy": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["skill_mode", "project_mode", "effective_mode"],
+      "properties": {
+        "skill_mode": {"enum": ["disabled", "optional", "required"]},
+        "project_mode": {"enum": ["disabled", "optional", "required"]},
+        "effective_mode": {"enum": ["disabled", "optional", "required"]}
+      }
+    },
+    "cognition": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/cognition_record"}
+    },
+    "started_at": {"$ref": "#/$defs/nonblank"},
+    "finished_at": {"type": ["string", "null"]},
+    "transitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "at"],
+        "properties": {
+          "from": {"type": ["string", "null"]},
+          "to": {"$ref": "#/$defs/nonblank"},
+          "at": {"$ref": "#/$defs/nonblank"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "at", "details"],
+        "properties": {
+          "name": {"$ref": "#/$defs/nonblank"},
+          "status": {"$ref": "#/$defs/nonblank"},
+          "at": {"$ref": "#/$defs/nonblank"},
+          "details": {"type": "object"},
+          "error_code": {"type": "string"},
+          "error_message": {"type": "string"}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "allOf": [
+          {"$ref": "#/$defs/relative_path"},
+          {"pattern": "^artifacts/"}
+        ]
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_loaded",
+        "runtime_checked",
+        "execution_traced",
+        "artifacts_validated",
+        "validation_completed"
+      ],
+      "properties": {
+        "skill_loaded": {"type": "boolean"},
+        "runtime_checked": {"type": "boolean"},
+        "execution_traced": {"type": "boolean"},
+        "artifacts_validated": {"type": "boolean"},
+        "validation_completed": {"type": "boolean"}
+      }
+    },
+    "status": {"enum": ["RUNNING", "SUCCEEDED", "FAILED"]},
+    "final_state": {"$ref": "#/$defs/nonblank"},
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"$ref": "#/$defs/nonblank"},
+          "message": {"type": "string"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    },
+    "cognition_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "protocols",
+        "effective_mode",
+        "loaded",
+        "executed",
+        "validated",
+        "status",
+        "provider_outcome",
+        "changed_run_disposition",
+        "proposal_fields"
+      ],
+      "properties": {
+        "phase": {
+          "enum": ["COGNITION_PREPARE", "COGNITION_CRITIQUE", "MEMORY_REVIEW"]
+        },
+        "protocols": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonblank"}
+        },
+        "effective_mode": {"enum": ["disabled", "optional", "required"]},
+        "loaded": {"type": "boolean"},
+        "executed": {"type": "boolean"},
+        "validated": {"type": "boolean"},
+        "status": {
+          "enum": ["skipped", "executed", "blocked", "review_required"]
+        },
+        "provider_outcome": {"type": ["string", "null"]},
+        "changed_run_disposition": {"type": "boolean"},
+        "proposal_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["framing", "expansion", "criteria", "decision_support"]
+          }
+        },
+        "reason": {"$ref": "#/$defs/nonblank"},
+        "candidate_ref": {
+          "allOf": [
+            {"$ref": "#/$defs/relative_path"},
+            {"const": "memory/memory_candidate.json"}
+          ]
+        }
+      }
+    }
   }
 }

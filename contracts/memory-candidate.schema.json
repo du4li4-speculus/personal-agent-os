@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/memory-candidate.schema.json",
+  "title": "Agent OS Run-local Memory Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "project_id",
+    "run_id",
+    "scope",
+    "target_id",
+    "proposition",
+    "evidence_refs",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "candidate_id": {"$ref": "#/$defs/nonblank"},
+    "project_id": {"$ref": "#/$defs/nonblank"},
+    "run_id": {"$ref": "#/$defs/nonblank"},
+    "scope": {"enum": ["global", "project", "skill"]},
+    "target_id": {"$ref": "#/$defs/nonblank"},
+    "proposition": {"$ref": "#/$defs/nonblank"},
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/relative_path"}
+    },
+    "status": {"enum": ["proposed"]}
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    }
+  }
+}

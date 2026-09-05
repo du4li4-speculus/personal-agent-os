@@ -1,6 +1,7 @@
+schema_version: "1.0"
 skills:
   toefl-writing-grader:
-    version: 1.0.0
-    type: assessment
-    status: active
+    version: "2.0.0"
+    status: development
     path: skills/toefl-writing-grader
+    manifest: manifest.yaml

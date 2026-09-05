@@ -1,0 +1,6 @@
+global/*
+!global/README.md
+projects/*
+!projects/README.md
+skills/*
+!skills/README.md

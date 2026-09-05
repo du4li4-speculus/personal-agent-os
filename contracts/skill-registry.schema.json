@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/skill-registry.schema.json",
+  "title": "Agent OS Skill Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "skills"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "skills": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/registry_entry"}
+    }
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    },
+    "registry_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "status", "path", "manifest"],
+      "properties": {
+        "version": {"$ref": "#/$defs/nonblank"},
+        "status": {"enum": ["development", "active", "deprecated", "disabled"]},
+        "path": {"$ref": "#/$defs/relative_path"},
+        "manifest": {"$ref": "#/$defs/relative_path"}
+      }
+    }
+  }
+}

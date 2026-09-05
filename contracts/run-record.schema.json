@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-agent-os.local/contracts/run-record.schema.json",
+  "title": "Agent OS Run Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "project_id",
+    "skill_name",
+    "skill_version",
+    "state",
+    "input_refs",
+    "artifact_refs",
+    "trace_ref"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"$ref": "#/$defs/nonblank"},
+    "project_id": {"$ref": "#/$defs/nonblank"},
+    "skill_name": {"$ref": "#/$defs/nonblank"},
+    "skill_version": {"$ref": "#/$defs/nonblank"},
+    "state": {"$ref": "#/$defs/nonblank"},
+    "input_refs": {"$ref": "#/$defs/references"},
+    "artifact_refs": {"$ref": "#/$defs/references"},
+    "trace_ref": {"$ref": "#/$defs/relative_path"}
+  },
+  "$defs": {
+    "nonblank": {"type": "string", "pattern": ".*\\S.*"},
+    "relative_path": {
+      "allOf": [
+        {"$ref": "#/$defs/nonblank"},
+        {"not": {"pattern": "^(?:/|[A-Za-z]:[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    },
+    "references": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/relative_path"}
+    }
+  }
+}
