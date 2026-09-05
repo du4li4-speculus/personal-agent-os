@@ -4,6 +4,8 @@
 
 Define one ownership model for Core, Cognition, Runtime, Registry, Skill, Project, Artifacts, and Memory Candidate. Detailed rules live in the canonical policy files under `docs/policies/`.
 
+The verified v0.3+ publication state is recorded in `docs/REPOSITORY_STATE.md`. This document defines boundaries; it does not advertise unfinished extension points as available capabilities.
+
 ## Authority chain
 
 `Core -> Cognition -> Runtime Control Plane -> Registry -> Skill -> Project -> Artifacts -> Memory Candidate`
@@ -73,4 +75,6 @@ Accepted rationale and rejected alternatives are indexed in `docs/adr/README.md`
 
 ## Automated enforcement
 
-`tests/test_architecture_boundaries.py` audits Runtime imports, persistent-Memory write targets, tracked run/output data, active and development Skill status behavior, Agent-role rejection, and canonical authority links against the actual repository. `.github/workflows/ci.yml` runs that audit with contract validation, the full unit suite, and whitespace checks.
+`tests/test_architecture_boundaries.py` audits Runtime imports, persistent-Memory write targets, tracked run/output data, active and development Skill status behavior, Agent-role rejection, and canonical authority links against the actual repository. `.github/workflows/ci.yml` installs dependencies, validates contracts, runs that audit and the full unit suite, and invokes `git diff --check`. The whitespace command checks only the diff present in the CI checkout; it does not audit historical repository whitespace.
+
+The current Registry has no production-active Skill. `toefl-writing-grader` 2.0.0 remains `development`, and test-only active fixtures do not constitute published capabilities.

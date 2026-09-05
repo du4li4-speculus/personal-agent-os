@@ -20,6 +20,10 @@ Runtime turns workflow rules into executable control. The implementation is a sm
 
 Canonical ownership is defined in `docs/ARCHITECTURE_BOUNDARIES.md`; Runtime invariants are defined in `docs/policies/RUNTIME_POLICY.md`.
 
+## Published availability
+
+The v0.3+ control plane is executable and covered by the repository test suite, but the current Registry has no production-active domain Skill. Its active sample Skill is fixture-only. `toefl-writing-grader` 2.0.0 remains `development`, so these Runtime mechanisms are tested infrastructure rather than proof of a complete TOEFL workflow. See `docs/REPOSITORY_STATE.md` for the verified publication snapshot.
+
 ## Setup
 
 Python 3.11+ is supported. Install the contract dependencies:
@@ -55,10 +59,10 @@ Entrypoint `python_path` values must be relative, must not contain `..`, and mus
 ## Commands
 
 ```bash
-python -m runtime.cli list-skills
-python -m runtime.cli validate-contracts
-python -m unittest discover -s tests -v
-python -m runtime.cli validate-trace \
+python3 -m runtime.cli list-skills
+python3 -m runtime.cli validate-contracts
+python3 -m unittest discover -s tests -v
+python3 -m runtime.cli validate-trace \
   --trace /path/to/run/execution_trace.json
 ```
 
@@ -75,3 +79,5 @@ Recoverable output-directory readiness errors can retry once through `RECOVERY`.
 ## Data boundary
 
 Runtime stages inputs and writes work files, artifacts, traces, and optional Memory Candidates only under `runs/<project-id>/<run-id>/`. Persistent global, Project, and Skill Memory remain outside `AgentRuntime.run()` ownership. The canonical Project and Memory rules are in `docs/policies/PROJECT_BOUNDARY_POLICY.md` and `docs/policies/MEMORY_POLICY.md`.
+
+Creating a candidate is not persistent learning. Promotion remains an explicitly reviewed operation outside Runtime, and content-level artifact inspection remains a future extension governed by the ADR process.

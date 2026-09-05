@@ -57,6 +57,8 @@ Runtime may use Registry to locate a Skill manifest and entrypoint. Runtime then
 
 `toefl-writing-grader` remains `development` until every gate in `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md` passes. Historical plans cannot change Registry truth; `docs/PLAN_STATUS.md` identifies their authority status.
 
+At the v0.3+ publication boundary, it is the only repository Registry entry and there are no production-active Skills. The observed branch, commit, and verification state is recorded in `docs/REPOSITORY_STATE.md`.
+
 ## Change process
 
 Changes to Registry ownership or status semantics require the Expansion, Critique, and Decision gate and an ADR. Adding an ordinary Skill entry that satisfies the existing contract follows `docs/policies/EXTENSION_POLICY.md` and does not redefine Registry policy.
@@ -67,4 +69,5 @@ Changes to Registry ownership or status semantics require the Expansion, Critiqu
 - `docs/policies/EXTENSION_POLICY.md`
 - `docs/adr/0003-resolve-skills-through-registry-entrypoints.md`
 - `docs/PLAN_STATUS.md`
+- `docs/REPOSITORY_STATE.md`
 - `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md`

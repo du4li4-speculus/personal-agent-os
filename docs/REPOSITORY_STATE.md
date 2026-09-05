@@ -1,105 +1,87 @@
 # Repository State for Agent OS v0.3+
 
-## Observation
+## Publication snapshot
 
-- Observed: 2026-09-04, Asia/Shanghai
+- Verified: 2026-09-05, Asia/Shanghai
 - Repository: `du4li4-speculus/personal-agent-os`
-- Starting branch: `main`
 - Integration branch: `codex/agent-os-v0.3-plus`
-- Local starting HEAD: `ce807686bddd470b7e647642f3ee52ea7c67ee66`
-- GitHub `main` from `git ls-remote`: `31763539884aaba4a8b24f0065a50d432d78b89b`
-- Local pre-fetch `origin/main`: `91a1353bb2ef27f1ea6791e252be7b114f7025f9`
-- Verified post-fetch `origin/main`: `31763539884aaba4a8b24f0065a50d432d78b89b`
-- Relationship reported before branching: local `main` ahead of the stale local tracking ref by 2 commits
+- Local foundation branch tip at integration start: `ce807686bddd470b7e647642f3ee52ea7c67ee66`
+- Merged GitHub `main` SHA: `31763539884aaba4a8b24f0065a50d432d78b89b`
+- Reconciliation merge: `da0a3cfa0e84119c15f25cab51d9e581a4a6f81b`
+- Test suite: 86 tests passing
+- Registry status: no production-active Skills; `toefl-writing-grader` 2.0.0 is `development`
+- Publication commit: `docs: publish agent os architecture v0.3+` (this commit)
 
-## Local-only Runtime commits at the starting point
+The integration branch preserves both the local executable Runtime lineage and the verified GitHub Cognition/governance lineage. No rebase, force update, or history rewrite was used.
 
-1. `ce9c8cf` - `docs: specify agent runtime foundation`
-2. `ce80768` - `feat: implement executable agent runtime`
+## Actual v0.3+ integration sequence
 
-The second commit added the executable Runtime control plane, Registry and Skill loaders, state management, artifact and trace validation, CLI, and 15 Runtime tests.
+This is the actual first-parent Task sequence, including the separately reviewed Task 7 lifecycle reconciliation amendment. It supersedes the originally planned sequence as a statement of what happened; historical plans remain unchanged under `docs/PLAN_STATUS.md`.
 
-## Pre-existing modified source files
-
-- `skills/toefl-writing-grader/SKILL.md`
-- `skills/toefl-writing-grader/manifest.yaml`
-- `skills/toefl-writing-grader/schemas/artifact.schema.json`
-- `skills/toefl-writing-grader/schemas/diagnostic.schema.json`
-- `skills/toefl-writing-grader/templates/practice_generator.md`
-- `skills/toefl-writing-grader/templates/teacher_dashboard.md`
-- `skills/toefl-writing-grader/tests/human_override.yaml`
-
-## Pre-existing untracked source and architecture files
-
-- `docs/AGENT_OS_ARCHITECTURE_REVIEW.md`
-- `docs/superpowers/plans/2026-09-03-toefl-agent-os-handoff-merge.md`
-- `docs/superpowers/plans/2026-09-03-toefl-agent-os-workspace-migration.md`
-- `docs/superpowers/plans/2026-09-04-agent-os-architecture-upgrade-v0.3-plus.md`
-- `skills/toefl-writing-grader/artifacts/README.md`
-- `skills/toefl-writing-grader/assessment/README.md`
-- `skills/toefl-writing-grader/diagnosis/README.md`
-- `skills/toefl-writing-grader/evidence/README.md`
-- `skills/toefl-writing-grader/extractor/__init__.py`
-- `skills/toefl-writing-grader/extractor/evidence_extractor.py`
-- `skills/toefl-writing-grader/input/README.md`
-- `skills/toefl-writing-grader/input_adapters/__init__.py`
-- `skills/toefl-writing-grader/input_adapters/base_adapter.py`
-- `skills/toefl-writing-grader/input_adapters/image_adapter.py`
-- `skills/toefl-writing-grader/input_adapters/pages_adapter.py`
-- `skills/toefl-writing-grader/input_adapters/text_adapter.py`
-- `skills/toefl-writing-grader/learning/README.md`
-- `skills/toefl-writing-grader/references/migration_map.md`
-- `skills/toefl-writing-grader/schemas/assessment.schema.json`
-- `skills/toefl-writing-grader/schemas/evidence.schema.json`
-- `skills/toefl-writing-grader/schemas/learning_loop.schema.json`
-- `skills/toefl-writing-grader/schemas/source_bundle.schema.json`
-- `skills/toefl-writing-grader/schemas/teacher_override.schema.json`
-- `skills/toefl-writing-grader/schemas/validation_record.schema.json`
-- `skills/toefl-writing-grader/tests/multi_format_input_test.yaml`
-- `skills/toefl-writing-grader/validation/README.md`
-
-## Explicitly excluded local data
-
-- `.DS_Store`
-- `docs/superpowers/.DS_Store`
-- `skills/toefl-writing-grader/output/`
-- all files below the existing `831_白雪_试批` run output
-
-These paths are not part of any source-preservation commit. The output directory remains in place and is neither modified nor deleted.
-
-## Reconciliation conflicts known before merge
-
-1. GitHub `main`, local Runtime commits, and uncommitted TOEFL work are three valid states that must be preserved.
-2. GitHub Registry advertises TOEFL Skill `1.0.0` while its manifest advertises `2.0.0`; current local Runtime rejects this mismatch.
-3. GitHub adds Cognition and governance documents while local commits add the executable Runtime.
-4. Historical migration guidance says Runtime remains unchanged; the explicit v0.3+ architecture request supersedes that constraint.
-5. Existing Skill output mixes run data with source and cannot be staged.
-
-## Preservation strategy
-
-1. Create `codex/agent-os-v0.3-plus` without changing the working tree.
-2. Add narrow ignore rules for macOS metadata, Python bytecode, and `skills/*/output/`.
-3. Commit the complete pre-existing source state with explicit path staging.
-4. Fetch and verify GitHub `main`; stop if its SHA differs from `31763539884aaba4a8b24f0065a50d432d78b89b`.
-5. Merge without rebase or history rewriting; preserve local Runtime and resolve only reviewed conflicts.
-6. Do not move, delete, or stage run data during Tasks 1-3.
-
-## Task 2 reconciliation result
-
-- HTTPS diagnosis resolved DNS and connected to `github.com:443`.
-- TLS 1.3 negotiation and certificate verification succeeded.
-- HTTP/1.1 was already selected by the existing global Git configuration; no Git configuration was changed for the fetch.
-- Git smart-HTTP advertisement and `git-upload-pack` requests returned HTTP 200.
-- The 36-object pack was received and unpacked successfully.
-- `origin/main` advanced from `91a1353` to the locked `3176353` SHA.
-- The non-rebase merge completed without textual conflicts.
-- Remote Cognition/governance files and the local executable Runtime coexist.
-- Post-merge Runtime tests pass 15/15 and `git diff --check` is clean.
-
-## Task checkpoint log
-
-| Task | Status | Commit | Verification |
+| Order | Task | Commit | Result |
 | --- | --- | --- | --- |
-| Task 1 - protect current state | complete | `fe3abd9` | 15/15 baseline tests pass; staged diff check clean; no output or `.DS_Store` staged |
-| Task 2 - reconcile GitHub main | complete | `merge: reconcile github architecture with local runtime` (this merge commit) | locked SHA fetched; conflict-free merge; 15/15 tests pass |
-| Task 3 - governance contracts and ADRs | pending | pending | pending |
+| 1 | Task 1 | `fe3abd9` `chore: preserve current agent os working state` | Preserved the complete source state while excluding local run data. |
+| 2 | Task 2 | `da0a3cf` `merge: reconcile github architecture with local runtime` | Merged GitHub `main` at `3176353` with the local Runtime lineage. |
+| 3 | Task 3 | `625d5e4` `docs: establish agent os governance contracts` | Established five policy owners and six ADRs. |
+| 4 | Task 4 | `47f2628` `feat: define agent os machine contracts` | Added versioned Registry, Skill, Project, Run, Memory Candidate, and Agent-role contracts. |
+| 5 | Task 5 | `d6886d9` `feat: execute registered skill entrypoints` | Enforced safe Registry-resolved Skill-local entrypoints and typed capability ports. |
+| 6 | Task 6 | `0490989` `feat: isolate project run and memory data` | Established Project, Run, input-staging, and candidate-only Memory boundaries. |
+| 7 | Task 7 | `2dd24fe` `feat: integrate cognition lifecycle hooks` | Integrated policy-controlled Prepare, Critique, and Memory Review hooks. |
+| 8 | Task 7 amendment | `57e95b5` `fix: reconcile task 7 lifecycle ordering` | Canonicalized the implemented lifecycle and strengthened complete transition validation. |
+| 9 | Task 8 | `daca115` `test: enforce the TOEFL skill boundary` | Tested implemented input/evidence stages and preserved truthful development status. |
+| 10 | Task 9 | `ba3cc8b` `test: enforce agent os architecture boundaries` | Added real-repository invariants and CI enforcement. |
+| 11 | Task 10 | this commit, `docs: publish agent os architecture v0.3+` | Published documentation that matches tested behavior and current readiness. |
+
+The merged GitHub lineage ends at `3176353` (`Add registry policy for capability boundaries`). The local Runtime foundation immediately before Task 1 consists of `ce9c8cf` (`docs: specify agent runtime foundation`) and `ce80768` (`feat: implement executable agent runtime`).
+
+## Verified architecture state
+
+- The one-way authority chain and distinction from source dependencies are canonical in `docs/ARCHITECTURE_BOUNDARIES.md`.
+- Five governance policies under `docs/policies/` and six accepted ADRs under `docs/adr/` own architecture decisions.
+- Machine contracts and cross-document validation cover Registry, Skill, Project, Run, Memory Candidate, and Agent-role documents.
+- Production Runtime accepts no caller-supplied domain executor and imports no TOEFL/domain package directly.
+- Safe entrypoint resolution rejects absolute, traversal, symlink-escape, and realpath-escape paths and cleans temporary import state.
+- New run-instance data is contained under `runs/<project-id>/<run-id>/`; Runtime has no persistent Memory promotion API.
+- Cognition protocol selection/loading, provider execution, skipping, blocking, review requirements, and validation remain distinct trace facts.
+- The reconciled lifecycle is `LOAD_SKILL -> RUNTIME_CHECK -> COGNITION_PREPARE -> EXECUTE -> ARTIFACT -> COGNITION_CRITIQUE -> VALIDATE -> MEMORY_REVIEW -> DELIVER`.
+- `ARTIFACT` is structural admission only. Critique is references-only, and blocked or review-required output is non-deliverable.
+
+## Skill truth
+
+The Registry contains one Skill:
+
+- `toefl-writing-grader` 2.0.0 — `development`
+
+Implemented and tested TOEFL stages are limited to input normalization, provenance preservation, evidence extraction, assessment-readiness gating, and source/evidence schema validation. There is no production entrypoint and no assessment, diagnosis, learning-loop, PDF, or dashboard execution. Activation remains governed by `docs/TOEFL_SKILL_ACTIVATION_CRITERIA.md`.
+
+## Data and working-tree status
+
+- `runs/.gitignore` ignores run-instance content while retaining only `runs/.gitignore` and `runs/README.md` as tracked scaffolding.
+- `.gitignore` ignores `skills/*/output/`, including the original legacy TOEFL output.
+- `runs/toefl-writing/legacy-831-baixue-trial/` is an ignored preservation copy. Read-only comparison on 2026-09-05 found its 12 files byte-identical to the original legacy output; the original was not renamed, deleted, or modified.
+- No run-instance file or Skill output file is tracked.
+- `docs/reviews/` remains untracked and is intentionally outside the Task 10 publication commit.
+- Persistent Memory scaffolding under `memory/global/`, `memory/projects/`, and `memory/skills/` is tracked, but Runtime-created candidates are run-local and do not constitute persistent learning.
+
+## Final verification contract
+
+The publication boundary is verified with:
+
+```bash
+python3 -m runtime.cli validate-contracts
+python3 -m unittest discover -s tests -v
+git diff --check
+git status --short
+```
+
+CI additionally runs the dedicated architecture-boundary test module before the full suite. Its final `git diff --check` invocation checks the diff present in the checkout and is not a historical-whitespace audit.
+
+## Known limitations and follow-on boundary
+
+- There is no production-active Skill, so the Runtime control plane is executable but no repository domain workflow is production-ready.
+- The repository does not ship a model- or vendor-specific Cognition provider; protocol loading alone is not provider execution.
+- Cognition Critique is references-only. Content inspection requires a new or superseding ADR and a bounded inspection capability.
+- Runtime can create a proposed run-local Memory Candidate but cannot promote or write persistent Memory.
+- TOEFL assessment, diagnosis, learning-loop execution, PDF rendering, dashboard generation, and composite entrypoint work remain outside v0.3+.
+
+No push, merge to `main`, pull request, tag, release, domain completion, provider integration, or persistent-Memory promotion is part of this publication task.

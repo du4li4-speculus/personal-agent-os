@@ -2,6 +2,8 @@
 
 This document is the human-readable companion to `runtime/state_machine.yaml`. Runtime owns lifecycle enforcement and truthful execution traces; it does not own Skill semantics, Cognition protocol content, Project decisions, or persistent Memory.
 
+This is the canonical v0.3+ lifecycle contract. The tested publication state is recorded in `docs/REPOSITORY_STATE.md`; changes to lifecycle order or state meaning require the ADR process indexed by `docs/adr/README.md`.
+
 ## Lifecycle
 
 ```text
