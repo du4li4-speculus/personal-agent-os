@@ -11,7 +11,12 @@ import yaml
 from runtime.capabilities import CapabilitySet
 from runtime.cognition_manager import CognitionManager
 from runtime.contract_validator import ContractValidator
-from runtime.models import CapabilityProvider, RunResult, ValidationResult
+from runtime.models import (
+    CapabilityProvider,
+    RunResult,
+    RuntimeReadinessError,
+    ValidationResult,
+)
 from runtime.runner import AgentRuntime
 from runtime.validator_engine import ValidatorEngine
 from tests.test_runtime import write_active_sample_repository
@@ -122,6 +127,90 @@ class CognitionLifecycleTestCase(unittest.TestCase):
             self.assertFalse(record["validated"])
             self.assertFalse(record["changed_run_disposition"])
             self.assertEqual(record["reason"], "provider_unavailable")
+
+    def test_readiness_failure_does_not_execute_prepare(self) -> None:
+        root = self._next_root()
+        repository = root / "repository"
+        _configure_fixture(
+            repository, skill_mode="optional", project_mode="optional"
+        )
+        phases: list[str] = []
+
+        def provider(
+            capability_id: str, payload: Mapping[str, Any]
+        ) -> Mapping[str, Any]:
+            phases.append(str(payload["phase"]))
+            return {"outcome": "pass"}
+
+        runtime = AgentRuntime(repository)
+
+        def fail_readiness(*args: Any) -> None:
+            raise RuntimeReadinessError(
+                "permanent readiness failure", recoverable=False
+            )
+
+        runtime._runtime_check = fail_readiness  # type: ignore[method-assign]
+        result = runtime.run(
+            task="readiness must precede cognition",
+            skill_name="sample",
+            project_id="test",
+            inputs=(),
+            run_root=root / "runs",
+            capabilities={"cognition.execute": provider},
+        )
+        trace = _read_trace(result)
+
+        self.assertEqual(phases, [])
+        self.assertEqual(trace["cognition"], [])
+        self.assertNotIn(
+            "COGNITION_PREPARE", [item["to"] for item in trace["transitions"]]
+        )
+
+    def test_recovery_does_not_repeat_prepare(self) -> None:
+        root = self._next_root()
+        repository = root / "repository"
+        _configure_fixture(
+            repository, skill_mode="optional", project_mode="optional"
+        )
+        phases: list[str] = []
+
+        def provider(
+            capability_id: str, payload: Mapping[str, Any]
+        ) -> Mapping[str, Any]:
+            phases.append(str(payload["phase"]))
+            if payload["phase"] == "memory_review":
+                return {"outcome": "no_candidate"}
+            return {"outcome": "pass"}
+
+        runtime = AgentRuntime(repository)
+        original_check = runtime._runtime_check
+        readiness_attempts = 0
+
+        def flaky_readiness(*args: Any) -> None:
+            nonlocal readiness_attempts
+            readiness_attempts += 1
+            if readiness_attempts == 1:
+                raise RuntimeReadinessError("recoverable readiness failure")
+            original_check(*args)
+
+        runtime._runtime_check = flaky_readiness  # type: ignore[method-assign]
+        result = runtime.run(
+            task="recovery must not repeat cognition",
+            skill_name="sample",
+            project_id="test",
+            inputs=(),
+            run_root=root / "runs",
+            capabilities={"cognition.execute": provider},
+        )
+        trace = _read_trace(result)
+
+        self.assertTrue(result.succeeded, result.to_dict())
+        self.assertEqual(readiness_attempts, 2)
+        self.assertEqual(phases.count("prepare"), 1)
+        transitions = [item["to"] for item in trace["transitions"]]
+        self.assertLess(
+            transitions.index("RECOVERY"), transitions.index("COGNITION_PREPARE")
+        )
 
     def test_protocol_registry_contract_and_registered_files_are_valid(self) -> None:
         document = yaml.safe_load(
@@ -270,6 +359,10 @@ class CognitionLifecycleTestCase(unittest.TestCase):
             {"run_id", "project_id", "skill_name", "artifact_refs"},
         )
         self.assertEqual(
+            calls[1][1]["context"]["artifact_refs"],
+            ["artifacts/result.txt"],
+        )
+        self.assertEqual(
             set(calls[2][1]["context"]),
             {
                 "run_id",
@@ -296,6 +389,50 @@ class CognitionLifecycleTestCase(unittest.TestCase):
             ["criteria"],
         )
 
+    def test_artifact_admission_failure_does_not_invoke_critique(self) -> None:
+        root = self._next_root()
+        repository = root / "repository"
+        _configure_fixture(
+            repository, skill_mode="optional", project_mode="optional"
+        )
+        entrypoint_path = (
+            repository
+            / "skills"
+            / "sample"
+            / "src"
+            / "sample_skill"
+            / "entrypoint.py"
+        )
+        entrypoint_path.write_text(
+            "from runtime.models import SkillExecutionResult\n"
+            "def execute(context, skill, capabilities):\n"
+            "    return SkillExecutionResult({}, {})\n",
+            encoding="utf-8",
+        )
+        phases: list[str] = []
+
+        def provider(
+            capability_id: str, payload: Mapping[str, Any]
+        ) -> Mapping[str, Any]:
+            phases.append(str(payload["phase"]))
+            return {"outcome": "pass"}
+
+        result = AgentRuntime(repository).run(
+            task="artifact admission must precede critique",
+            skill_name="sample",
+            project_id="test",
+            inputs=(),
+            run_root=root / "runs",
+            capabilities={"cognition.execute": provider},
+        )
+        trace = _read_trace(result)
+
+        self.assertEqual(result.final_state, "FAILED")
+        self.assertEqual(phases, ["prepare"])
+        self.assertNotIn(
+            "COGNITION_CRITIQUE", [item["to"] for item in trace["transitions"]]
+        )
+
     def test_blocked_critique_fails_without_memory_review_or_retry(self) -> None:
         calls: list[str] = []
 
@@ -313,6 +450,19 @@ class CognitionLifecycleTestCase(unittest.TestCase):
         self.assertTrue(record["validated"])
         self.assertTrue(record["changed_run_disposition"])
         self.assertEqual(calls, ["prepare", "critique"])
+        self.assertTrue(trace["proof"]["artifacts_validated"])
+        self.assertEqual(trace["status"], "FAILED")
+        self.assertEqual(trace["final_state"], "FAILED")
+        self.assertNotIn("DELIVER", [item["to"] for item in trace["transitions"]])
+        self.assertFalse(
+            ValidatorEngine()
+            .validate_trace(
+                trace,
+                run_root=result.trace_path.parent.parent,
+                require_deliverable=True,
+            )
+            .valid
+        )
         self.assertEqual(
             [item for item in trace["cognition"] if item["phase"] == "MEMORY_REVIEW"],
             [],
@@ -330,7 +480,19 @@ class CognitionLifecycleTestCase(unittest.TestCase):
         result, trace, _ = self._run_with_provider(provider)
         self.assertIn("COGNITION_REVIEW_REQUIRED", result.validation_errors[0])
         self.assertPhase(trace, "COGNITION_CRITIQUE", "review_required")
+        self.assertTrue(trace["proof"]["artifacts_validated"])
+        self.assertEqual(trace["status"], "FAILED")
         self.assertEqual(trace["final_state"], "FAILED")
+        self.assertNotIn("DELIVER", [item["to"] for item in trace["transitions"]])
+        self.assertFalse(
+            ValidatorEngine()
+            .validate_trace(
+                trace,
+                run_root=result.trace_path.parent.parent,
+                require_deliverable=True,
+            )
+            .valid
+        )
 
     def test_memory_review_writes_only_run_local_candidate_after_validation(self) -> None:
         observed_validation: list[bool] = []

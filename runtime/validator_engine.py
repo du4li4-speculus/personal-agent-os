@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .artifact_manager import ArtifactManager
-from .models import ArtifactValidationError, ValidationResult
+from .models import AgentRuntimeError, ArtifactValidationError, ValidationResult
+from .state_manager import StateManager
 
 
 REQUIRED_TRACE_FIELDS = {
@@ -51,6 +52,13 @@ REQUIRED_PROOF_FLAGS = {
 
 class ValidatorEngine:
     """Return structured validation results for a completed trace."""
+
+    def __init__(self, state_machine_path: Path | None = None) -> None:
+        self.state_machine_path = (
+            Path(state_machine_path)
+            if state_machine_path is not None
+            else Path(__file__).with_name("state_machine.yaml")
+        )
 
     def validate_trace_file(self, trace_path: Path) -> ValidationResult:
         resolved_trace = Path(trace_path).resolve()
@@ -128,17 +136,11 @@ class ValidatorEngine:
                     if trace["proof"].get(flag) is not True:
                         errors.append(f"Proof flag is not true: {flag}")
 
-        if isinstance(trace.get("transitions"), list) and trace["transitions"]:
-            first = trace["transitions"][0]
-            last = trace["transitions"][-1]
-            if not isinstance(first, dict) or first.get("to") != "CREATED":
-                errors.append("Trace must begin at CREATED")
-            expected_last_state = "DELIVER" if require_deliverable else trace["final_state"]
-            if not isinstance(last, dict) or last.get("to") != expected_last_state:
-                errors.append(f"Trace must end at {expected_last_state}")
-            for transition in trace["transitions"]:
-                if not isinstance(transition, dict) or not transition.get("to"):
-                    errors.append("Trace contains an invalid state transition")
+        self._validate_transitions(
+            trace,
+            errors,
+            require_deliverable=require_deliverable,
+        )
 
         self._validate_run_record(trace, errors)
         self._validate_cognition(
@@ -171,6 +173,68 @@ class ValidatorEngine:
             else:
                 errors.extend(artifact_errors)
         return ValidationResult(not errors, tuple(errors))
+
+    def _validate_transitions(
+        self,
+        trace: Mapping[str, Any],
+        errors: list[str],
+        *,
+        require_deliverable: bool,
+    ) -> None:
+        transitions = trace.get("transitions")
+        if not isinstance(transitions, list) or not transitions:
+            return
+
+        first = transitions[0]
+        if (
+            not isinstance(first, dict)
+            or first.get("from") is not None
+            or first.get("to") != "CREATED"
+        ):
+            errors.append("Trace lifecycle must begin with null -> CREATED")
+            return
+
+        expected_last_state = (
+            "DELIVER" if require_deliverable else trace.get("final_state")
+        )
+        last = transitions[-1]
+        if not isinstance(last, dict) or last.get("to") != expected_last_state:
+            errors.append(f"Trace must end at {expected_last_state}")
+
+        try:
+            state_manager = StateManager.from_file(self.state_machine_path)
+        except AgentRuntimeError as exc:
+            errors.append(f"Unable to validate trace lifecycle: {exc.message}")
+            return
+
+        for index, transition in enumerate(transitions[1:], start=1):
+            if not isinstance(transition, dict):
+                errors.append(
+                    f"Trace lifecycle transition at index {index} is not a mapping"
+                )
+                return
+            from_state = transition.get("from")
+            to_state = transition.get("to")
+            if from_state != state_manager.current_state:
+                errors.append(
+                    "Trace lifecycle transition chain is invalid at index "
+                    f"{index}: expected from={state_manager.current_state}, "
+                    f"got from={from_state}"
+                )
+                return
+            if not isinstance(to_state, str) or not to_state:
+                errors.append(
+                    f"Trace lifecycle transition at index {index} has no target"
+                )
+                return
+            try:
+                state_manager.transition(to_state)
+            except AgentRuntimeError as exc:
+                errors.append(
+                    "Trace lifecycle transition is invalid at index "
+                    f"{index}: {exc.message}"
+                )
+                return
 
     @staticmethod
     def _validate_cognition(

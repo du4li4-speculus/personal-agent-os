@@ -95,18 +95,24 @@ stateDiagram-v2
     CREATED --> IDENTIFY_TASK
     IDENTIFY_TASK --> FIND_SKILL
     FIND_SKILL --> LOAD_SKILL
-    LOAD_SKILL --> COGNITION_PREPARE
-    COGNITION_PREPARE --> RUNTIME_CHECK
-    RUNTIME_CHECK --> EXECUTE
-    EXECUTE --> COGNITION_CRITIQUE
-    COGNITION_CRITIQUE --> ARTIFACT
-    ARTIFACT --> VALIDATE
+    LOAD_SKILL --> RUNTIME_CHECK
+    RUNTIME_CHECK --> COGNITION_PREPARE
+    COGNITION_PREPARE --> EXECUTE
+    EXECUTE --> ARTIFACT
+    ARTIFACT --> COGNITION_CRITIQUE
+    COGNITION_CRITIQUE --> VALIDATE
     VALIDATE --> MEMORY_REVIEW
     MEMORY_REVIEW --> DELIVER
     DELIVER --> [*]
 ```
 
 Loading Cognition is not executing Cognition. Trace records must distinguish `loaded`, `executed`, `skipped`, `blocked`, and `validated`.
+
+`RUNTIME_CHECK` completes, including its bounded recovery path, before a Cognition provider executes. This ordering fails fast, isolates recovery, controls provider cost, and avoids unnecessary data exposure.
+
+`ARTIFACT` is structural artifact admission only. It proves that declared outputs are exact, contained, regular, non-empty files normalized into trusted run-relative references. It does not prove domain, schema, or semantic correctness; Cognition approval; final Runtime validation; or deliverability.
+
+The v0.3+ `COGNITION_CRITIQUE` phase is references-based. It receives normalized artifact references and minimum run identity/context, without artifact contents or arbitrary filesystem access. Content-level artifact critique is outside v0.3+ and requires a new or superseding ADR plus a bounded artifact-inspection capability covering access, size, media, sensitive-data, and trace/proof rules.
 
 ## Data boundary
 

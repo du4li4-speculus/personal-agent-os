@@ -46,7 +46,7 @@ class AgentRuntime:
         self.skill_loader = SkillLoader(self.registry_loader)
         self.entrypoint_loader = EntrypointLoader()
         self.state_machine_path = self.repository_root / "runtime" / "state_machine.yaml"
-        self.validator = ValidatorEngine()
+        self.validator = ValidatorEngine(self.state_machine_path)
 
     def run(
         self,

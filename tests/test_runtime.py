@@ -283,6 +283,38 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("execution_traced", " ".join(validation.errors))
 
+    def test_validator_rejects_persisted_trace_with_invalid_lifecycle_order(
+        self,
+    ) -> None:
+        result = self._run(task="Invalid lifecycle trace test")
+        trace = json.loads(result.trace_path.read_text(encoding="utf-8"))
+        invalid_order = [
+            "CREATED",
+            "IDENTIFY_TASK",
+            "FIND_SKILL",
+            "LOAD_SKILL",
+            "COGNITION_PREPARE",
+            "RUNTIME_CHECK",
+            "EXECUTE",
+            "ARTIFACT",
+            "COGNITION_CRITIQUE",
+            "VALIDATE",
+            "MEMORY_REVIEW",
+            "DELIVER",
+        ]
+        for index, state in enumerate(invalid_order):
+            trace["transitions"][index]["from"] = (
+                invalid_order[index - 1] if index else None
+            )
+            trace["transitions"][index]["to"] = state
+
+        validation = ValidatorEngine().validate_trace(
+            trace, run_root=result.trace_path.parent.parent
+        )
+
+        self.assertFalse(validation.valid)
+        self.assertIn("lifecycle transition", " ".join(validation.errors))
+
     def test_cli_trace_validation(self) -> None:
         result = self._run(task="CLI trace validation test")
         self.assertTrue(result.succeeded, result.to_dict())

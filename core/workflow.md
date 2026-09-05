@@ -35,11 +35,11 @@ Cognition never triggers recovery, automatic self-repair, or Skill re-execution.
 | `IDENTIFY_TASK` | Record the task and staged input count. | Task is non-empty. |
 | `FIND_SKILL` | Resolve the Project-allowed Registry key. | Skill is registered, active, and contained by `skills/`. |
 | `LOAD_SKILL` | Validate the Skill manifest and load its declared entrypoint. | Registry/manifest identity, version, contract, and entrypoint agree. |
-| `RUNTIME_CHECK` | Verify run paths, staged inputs, and non-Cognition required capabilities. | Paths remain under the run and required infrastructure is available. |
+| `RUNTIME_CHECK` | Verify run paths, staged inputs, and non-Cognition required capabilities before any Cognition provider executes. | Paths remain under the run and required infrastructure is available; bounded recovery is complete. |
 | `COGNITION_PREPARE` | Load selected prepare protocols and optionally request bounded reasoning proposals. | Optional absence is recorded as skipped; required absence fails before Skill execution. |
 | `EXECUTE` | Invoke only the Skill-local registered entrypoint. | Entrypoint returns a `SkillExecutionResult`. |
-| `ARTIFACT` | Validate declared intermediate and final artifacts. | Every returned path is exact, non-empty, and contained in `work/` or `artifacts/`. |
-| `COGNITION_CRITIQUE` | Request a bounded `pass`, `blocked`, or `review_required` disposition. | `pass` continues; the other outcomes fail closed without re-execution. |
+| `ARTIFACT` | Structurally admit declared intermediate and final artifacts. | Outputs are exact, contained, regular, non-empty files normalized into trusted run-relative references. |
+| `COGNITION_CRITIQUE` | Request a references-based `pass`, `blocked`, or `review_required` disposition using normalized artifact references and minimum run context. | `pass` continues; the other outcomes fail closed without re-execution. |
 | `VALIDATE` | Validate generic execution proof and run-scoped references. | Trace and artifacts satisfy their contracts. |
 | `MEMORY_REVIEW` | Optionally propose reusable learning after validation. | No candidate, or one schema-valid run-local proposed Memory Candidate. |
 | `DELIVER` | Persist the successful final trace. | Validation completed and no Cognition phase changed run disposition. |
@@ -73,6 +73,14 @@ Each phase trace records:
 Loading Markdown is not provider execution and cannot set `executed=true` or `validated=true`. Runtime sends the provider only the protocol content and minimum phase context. It contains no model prompts, vendor behavior, or domain rules.
 
 Prepare responses may contain only advisory framing, expansion, criteria, or decision-support proposals; Runtime does not apply those proposals to immutable contracts or Skill outputs. Critique responses are limited to `pass`, `blocked`, and `review_required`. Memory review may return `no_candidate` or one complete candidate proposal for validation by `MemoryManager`.
+
+## Structural artifact admission
+
+`ARTIFACT` is a structural admission gate, not final validation. It proves that the Skill returned the exact declared outputs, each resolved path remains in its owned run directory, each output is a regular non-empty file, and each persisted reference is normalized relative to the current run.
+
+Passing `ARTIFACT` does not prove domain/schema/semantic correctness, Cognition approval, completion of `VALIDATE`, or deliverability. A later `blocked` or `review_required` Critique leaves the run in `FAILED`; structurally admitted files may remain in the isolated run as evidence but are not deliverable.
+
+The v0.3+ Critique capability receives normalized artifact references plus minimum run identity/context only. Runtime does not provide artifact contents or arbitrary filesystem access. Content-level artifact critique requires a new or superseding ADR and a separately bounded artifact-inspection capability.
 
 ## Run and Memory boundaries
 
